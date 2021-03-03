@@ -14,5 +14,5 @@ target_include_directories(CxxCli INTERFACE "${PROJECT_SOURCE_DIR}/include")
 
 message(STATUS "tests ${DO_TESTS}")
 if(${DO_TESTS})
-	add_subdirectory("${PROJECT_SOURCE_DIR}/tests")
+    add_subdirectory("${PROJECT_SOURCE_DIR}/tests")
 endif()
