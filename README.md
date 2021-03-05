@@ -11,6 +11,8 @@ See tests
 ### CMake
 - Add <CxxCli/find/FindCxxCliLib.cmake> module to cmake module path
   - ```LIST(APPEND CMAKE_MODULE_PATH <path containing FindCxxCliLib.cmake>)```
+- Find CxxCliLib package
+  - find_package(CxxCliLib REQUIRED)
 - Link against ```CxxCliLib``` library
   - ```target_link_libraries(<library> CxxCliLib)```
 - #include "CxxCliLib/CxxCli.hpp"
