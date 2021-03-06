@@ -1,7 +1,9 @@
 
+#ifndef HEADER_CXXCLI
+#define HEADER_CXXCLI 1
+
 #include <utility>
 #include <tuple>
-//#include <type_traits>
 #include <cstring>
 
 namespace CxxCli {
@@ -306,3 +308,5 @@ namespace CxxCli {
     constexpr auto Command(sub_t && sub) -> templates::Command_t<sub_t> { return templates::Command_t<sub_t>(std::move(sub)); }
 
 }
+
+#endif
