@@ -8,17 +8,17 @@ Tested on MSVC 19
 ## Usage
 ### Code
 See tests
+
 ### CMake
-- Add <CxxCli/find/FindCxxCliLib.cmake> module to cmake module path
-  - ```LIST(APPEND CMAKE_MODULE_PATH <path containing FindCxxCliLib.cmake>)```
-- Find CxxCliLib package
-  - find_package(CxxCliLib REQUIRED)
+- Add <CxxCli/modules> path to cmake module path
+  - ```LIST(APPEND CMAKE_MODULE_PATH <CxxCli/modules>)```
+- Include CxxCli module
+  - ```include(IncludeCxxCli)```
 - Link against ```CxxCliLib``` library
   - ```target_link_libraries(<library> CxxCliLib)```
-- #include "CxxCliLib/CxxCli.hpp"
+- ```#include "CxxCli/CxxCli.hpp"```
 
 ## ToDo
-
 + source documentation
 + cmake module documentation
 + command usage
