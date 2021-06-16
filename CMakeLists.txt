@@ -14,5 +14,7 @@ target_include_directories(CxxCliLib INTERFACE "${PROJECT_SOURCE_DIR}/include")
 
 if(${CXXCLI_DO_TESTS})
     message(STATUS "CxxCli tests enabled")
+    include(CTest)
+    enable_testing()
     add_subdirectory("${PROJECT_SOURCE_DIR}/tests")
 endif()

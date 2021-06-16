@@ -27,7 +27,7 @@ namespace CxxCli {
                 sub_t m_sub;
                 constexpr Callback_t(fn_t && fn, sub_t sub) : m_fn(std::move(fn)), m_sub(std::move(sub)) {}
 
-                ret parse(ParseResult * r, int & i, int argc, const char ** argv) const {
+                ret parse(ParseResult * r, int & i, int argc, const char * const * argv) const {
                     return m_sub.parse(r, i, argc, argv, m_fn);
                 }
             };
@@ -46,7 +46,7 @@ namespace CxxCli {
                 constexpr Const_t(const char * value) : m_value(value) {}
 
                 template<typename fn_t = callback::nullcb>
-                ret parse(ParseResult * r, int & i, int argc, const char ** argv, const fn_t & cb = callback::nullcb()) const {
+                ret parse(ParseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = callback::nullcb()) const {
                     if (i >= argc) {
                         r->errorMessage = "index out of bounds";
                         r->usageMessage = "";
@@ -74,7 +74,7 @@ namespace CxxCli {
                 constexpr Var_t(const char * id) : m_identifier(id) {}
 
                 template<typename fn_t = callback::nullcb>
-                ret parse(ParseResult * r, int & i, int argc, const char ** argv, const fn_t & cb = callback::nullcb{}) const {
+                ret parse(ParseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = callback::nullcb{}) const {
                     if (i >= argc) {
                         r->errorMessage = "index out of bounds";
                         r->usageMessage = "";
@@ -97,7 +97,7 @@ namespace CxxCli {
 
             template<int I, int L, typename ... sub_t>
             struct parse_t {
-                static ret parse(const std::tuple<sub_t...> & subs, ParseResult * r, int & i, int argc, const char ** argv) {
+                static ret parse(const std::tuple<sub_t...> & subs, ParseResult * r, int & i, int argc, const char * const * argv) {
                     auto retVal = std::get<I>(subs).parse(r, i, argc, argv);
                     if (retVal != ret::ok) { return I == 0 ? ret::mismatch : (/*strictMatch*/true ? ret::error : retVal); }
                     if (I + 1 < L) {
@@ -110,7 +110,7 @@ namespace CxxCli {
 
             template<int L, typename ... sub_t>
             struct parse_t<L, L, sub_t...> {
-                static ret parse(const std::tuple<sub_t...> &, ParseResult *, int, int, const char **) {
+                static ret parse(const std::tuple<sub_t...> &, ParseResult *, int, int, const char * const *) {
                     return ret::ok;
                 }
             };
@@ -121,7 +121,7 @@ namespace CxxCli {
                 constexpr Sequence_t(subs_t && ... subs) : m_subs(std::move(subs)...) {}
 
                 template<typename fn_t = callback::nullcb>
-                ret parse(ParseResult * r, int & i, int argc, const char ** argv, const fn_t & cb = callback::nullcb{}) const {
+                ret parse(ParseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = callback::nullcb{}) const {
                     auto j = i;
                     auto retVal = parse_t<0, sizeof...(subs_t), subs_t...>::parse(m_subs, r, j, argc, argv);
                     if (retVal == ret::ok) {
@@ -144,7 +144,7 @@ namespace CxxCli {
 
             template<int I, int L, typename ... sub_t>
             struct parse_t {
-                static ret parse(const std::tuple<sub_t...> & subs, ParseResult * r, int & i, int argc, const char ** argv) {
+                static ret parse(const std::tuple<sub_t...> & subs, ParseResult * r, int & i, int argc, const char * const * argv) {
                     auto retVal = std::get<I>(subs).parse(r, i, argc, argv);
                     if (retVal != ret::ok) { return ret::mismatch; }
                     if (I + 1 < L) {
@@ -157,7 +157,7 @@ namespace CxxCli {
 
             template<int L, typename ... sub_t>
             struct parse_t<L, L, sub_t...> {
-                static ret parse(const std::tuple<sub_t...> &, ParseResult *, int, int, const char **) {
+                static ret parse(const std::tuple<sub_t...> &, ParseResult *, int, int, const char * const *) {
                     return ret::ok;
                 }
             };
@@ -168,7 +168,7 @@ namespace CxxCli {
                 constexpr Optional_t(subs_t && ... subs) : m_subs(std::move(subs)...) {}
 
                 template<typename fn_t = callback::nullcb>
-                ret parse(ParseResult * r, int & i, int argc, const char ** argv, const fn_t & cb = callback::nullcb{}) const {
+                ret parse(ParseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = callback::nullcb{}) const {
                     auto j = i;
                     auto retVal = parse_t<0, sizeof...(subs_t), subs_t...>::parse(m_subs, r, j, argc, argv);
                     if (retVal == ret::ok) {
@@ -195,7 +195,7 @@ namespace CxxCli {
                 constexpr Loop_t(subs_t && ... subs) : m_sub(std::move(subs)...) {}
 
                 template<typename fn_t = callback::nullcb>
-                ret parse(ParseResult * r, int & i, int argc, const char ** argv, const fn_t & cb = callback::nullcb{}) const {
+                ret parse(ParseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = callback::nullcb{}) const {
                     while (true) {
                         auto j = i;
                         auto retVal = m_sub.parse(r, j, argc, argv);
@@ -218,7 +218,7 @@ namespace CxxCli {
 
             template<int I, int L, typename ... sub_t>
             struct parse_t {
-                static ret parse(const std::tuple<sub_t...> & subs, ParseResult * r, int & i, int argc, const char ** argv) {
+                static ret parse(const std::tuple<sub_t...> & subs, ParseResult * r, int & i, int argc, const char * const * argv) {
                     auto retVal = std::get<I>(subs).parse(r, i, argc, argv);
                     if (retVal == ret::mismatch) {
                         return parse_t<I + 1, L, sub_t...>::parse(subs, r, i, argc, argv);
@@ -229,7 +229,7 @@ namespace CxxCli {
 
             template<int L, typename ... subs_t>
             struct parse_t<L, L, subs_t...> {
-                static ret parse(const std::tuple<subs_t...> &, ParseResult * r, int, int, const char **) {
+                static ret parse(const std::tuple<subs_t...> &, ParseResult * r, int, int, const char * const *) {
                     r->usageMessage = "";
                     r->errorMessage = "illegal branch state";
                     return ret::error;
@@ -242,7 +242,7 @@ namespace CxxCli {
                 constexpr Branch_t(subs_t && ... subs) : m_subs(std::move(subs)...) {}
 
                 template<typename fn_t = callback::nullcb>
-                ret parse(ParseResult * r, int & i, int argc, const char ** argv, const fn_t & cb = callback::nullcb{}) const {
+                ret parse(ParseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = callback::nullcb{}) const {
                     auto j = i;
                     auto retVal = parse_t<0, sizeof...(subs_t), subs_t...>::parse(m_subs, r, j, argc, argv);
                     if (retVal == ret::ok) {
@@ -270,7 +270,7 @@ namespace CxxCli {
 
             constexpr Command_t(sub_t && sub) : m_sub(std::move(sub)) {}
 
-            ParseResult parse(int argc, const char ** argv) const {
+            ParseResult parse(int argc, const char * const * argv) const {
                 ParseResult result;
                 int i = 0;
                 result.successfull = m_sub.parse(&result, i, argc, argv) == ret::ok;

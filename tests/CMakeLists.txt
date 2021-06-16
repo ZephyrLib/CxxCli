@@ -19,3 +19,5 @@ foreach(file ${test_files})
     message(STATUS "Found CxxCli test #${i}")
     MATH(EXPR i "${i}+1")
 endforeach()
+
+enable_testing()
