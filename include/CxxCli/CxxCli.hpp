@@ -25,7 +25,7 @@ namespace CxxCli {
             struct Callback_t {
                 fn_t m_fn;
                 sub_t m_sub;
-                constexpr Callback_t(fn_t && fn, sub_t sub) : m_fn(std::move(fn)), m_sub(std::move(sub)) {}
+                constexpr Callback_t(fn_t fn, sub_t sub) : m_fn(std::move(fn)), m_sub(std::move(sub)) {}
 
                 ret parse(ParseResult * r, int & i, int argc, const char * const * argv) const {
                     return m_sub.parse(r, i, argc, argv, m_fn);
@@ -34,7 +34,7 @@ namespace CxxCli {
 
             struct nullcb {
                 void operator()() const noexcept {}
-                void operator()(const char *) const noexcept {}
+                template<typename x> void operator()(const x &) const noexcept {}
             };
 
         }
@@ -59,7 +59,7 @@ namespace CxxCli {
                 }
 
                 template<typename fn_t>
-                friend callback::Callback_t<fn_t, Const_t> operator>>(Const_t && c, fn_t && fn) {
+                friend callback::Callback_t<fn_t, Const_t> operator>>(Const_t c, fn_t fn) {
                     return callback::Callback_t<fn_t, Const_t>(std::move(fn), std::move(c));
                 }
 
@@ -86,7 +86,7 @@ namespace CxxCli {
                 }
 
                 template<typename fn_t>
-                friend callback::Callback_t<fn_t, Var_t> operator>>(Var_t && v, fn_t && fn) {
+                friend callback::Callback_t<fn_t, Var_t> operator>>(Var_t v, fn_t fn) {
                     return callback::Callback_t<fn_t, Var_t>(std::move(fn), std::move(v));
                 }
             };
@@ -118,7 +118,7 @@ namespace CxxCli {
             template<typename ... subs_t>
             struct Sequence_t {
                 std::tuple<subs_t...> m_subs;
-                constexpr Sequence_t(subs_t && ... subs) : m_subs(std::move(subs)...) {}
+                constexpr Sequence_t(subs_t ... subs) : m_subs(std::forward<subs_t>(subs)...) {}
 
                 template<typename fn_t = callback::nullcb>
                 ret parse(ParseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = callback::nullcb{}) const {
@@ -132,7 +132,7 @@ namespace CxxCli {
                 }
 
                 template<typename fn_t>
-                friend callback::Callback_t<fn_t, Sequence_t> operator>>(Sequence_t && c, fn_t && fn) {
+                friend callback::Callback_t<fn_t, Sequence_t> operator>>(Sequence_t c, fn_t fn) {
                     return callback::Callback_t<fn_t, Sequence_t>(std::move(fn), std::move(c));
                 }
 
@@ -165,7 +165,7 @@ namespace CxxCli {
             template<typename ... subs_t>
             struct Optional_t {
                 std::tuple<subs_t...> m_subs;
-                constexpr Optional_t(subs_t && ... subs) : m_subs(std::move(subs)...) {}
+                constexpr Optional_t(subs_t ... subs) : m_subs(std::forward<subs_t>(subs)...) {}
 
                 template<typename fn_t = callback::nullcb>
                 ret parse(ParseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = callback::nullcb{}) const {
@@ -179,7 +179,7 @@ namespace CxxCli {
                 }
 
                 template<typename fn_t>
-                friend callback::Callback_t<fn_t, Optional_t> operator>>(Optional_t && c, fn_t && fn) {
+                friend callback::Callback_t<fn_t, Optional_t> operator>>(Optional_t c, fn_t fn) {
                     return callback::Callback_t<fn_t, Optional_t>(std::move(fn), std::move(c));
                 }
 
@@ -192,7 +192,7 @@ namespace CxxCli {
             template<typename ... subs_t>
             struct Loop_t {
                 sequence::Sequence_t<subs_t...> m_sub;
-                constexpr Loop_t(subs_t && ... subs) : m_sub(std::move(subs)...) {}
+                constexpr Loop_t(subs_t ... subs) : m_sub(std::forward<subs_t>(subs)...) {}
 
                 template<typename fn_t = callback::nullcb>
                 ret parse(ParseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = callback::nullcb{}) const {
@@ -206,7 +206,7 @@ namespace CxxCli {
                 }
 
                 template<typename fn_t>
-                friend callback::Callback_t<fn_t, Loop_t> operator>>(Loop_t && c, fn_t && fn) {
+                friend callback::Callback_t<fn_t, Loop_t> operator>>(Loop_t c, fn_t fn) {
                     return callback::Callback_t<fn_t, Loop_t>(std::move(fn), std::move(c));
                 }
 
@@ -239,7 +239,7 @@ namespace CxxCli {
             template<typename ... subs_t>
             struct Branch_t {
                 std::tuple<subs_t...> m_subs;
-                constexpr Branch_t(subs_t && ... subs) : m_subs(std::move(subs)...) {}
+                constexpr Branch_t(subs_t ... subs) : m_subs(std::forward<subs_t>(subs)...) {}
 
                 template<typename fn_t = callback::nullcb>
                 ret parse(ParseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = callback::nullcb{}) const {
@@ -253,7 +253,7 @@ namespace CxxCli {
                 }
 
                 template<typename fn_t>
-                friend callback::Callback_t<fn_t, Branch_t> operator>>(Branch_t && c, fn_t && fn) {
+                friend callback::Callback_t<fn_t, Branch_t> operator>>(Branch_t c, fn_t fn) {
                     return callback::Callback_t<fn_t, Branch_t>(std::move(fn), std::move(c));
                 }
 
@@ -268,7 +268,7 @@ namespace CxxCli {
 
         public:
 
-            constexpr Command_t(sub_t && sub) : m_sub(std::move(sub)) {}
+            constexpr Command_t(sub_t sub) : m_sub(std::move(sub)) {}
 
             ParseResult parse(int argc, const char * const * argv) const {
                 ParseResult result;
@@ -293,19 +293,19 @@ namespace CxxCli {
     constexpr auto Var(const char * identifier = "") -> templates::var::Var_t { return templates::var::Var_t(identifier); }
 
     template<typename ... subs_t>
-    constexpr auto Sequence(subs_t && ... subs) -> templates::sequence::Sequence_t<subs_t...> { return templates::sequence::Sequence_t<subs_t...>(std::move(subs)...); }
+    constexpr auto Sequence(subs_t ... subs) -> templates::sequence::Sequence_t<subs_t...> { return templates::sequence::Sequence_t<subs_t...>(std::move(subs)...); }
 
     template<typename ... subs_t>
-    constexpr auto Optional(subs_t && ... subs) -> templates::optional::Optional_t<subs_t...> { return templates::optional::Optional_t<subs_t...>(std::move(subs)...); }
+    constexpr auto Optional(subs_t ... subs) -> templates::optional::Optional_t<subs_t...> { return templates::optional::Optional_t<subs_t...>(std::move(subs)...); }
 
     template<typename ... subs_t>
-    constexpr auto Loop(subs_t && ... subs) -> templates::loop::Loop_t<subs_t...> { return templates::loop::Loop_t<subs_t...>(std::move(subs)...); }
+    constexpr auto Loop(subs_t ... subs) -> templates::loop::Loop_t<subs_t...> { return templates::loop::Loop_t<subs_t...>(std::move(subs)...); }
 
     template<typename ... subs_t>
-    constexpr auto Branch(subs_t && ... subs) -> templates::branch::Branch_t<subs_t...> { return templates::branch::Branch_t<subs_t...>(std::move(subs)...); }
+    constexpr auto Branch(subs_t ... subs) -> templates::branch::Branch_t<subs_t...> { return templates::branch::Branch_t<subs_t...>(std::move(subs)...); }
 
     template<typename sub_t>
-    constexpr auto Command(sub_t && sub) -> templates::Command_t<sub_t> { return templates::Command_t<sub_t>(std::move(sub)); }
+    constexpr auto Command(sub_t sub) -> templates::Command_t<sub_t> { return templates::Command_t<sub_t>(std::move(sub)); }
 
 }
 
