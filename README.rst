@@ -3,14 +3,12 @@ CxxCli
 ======
 C++11 Cli template library
 
-Trivialises cli command parsing logic.
+Trivialises cli command parsing logic
 
 Tested on MSVC 19
 
 Usage
 -----
-Code
-****
 See tests
 
 CMake
@@ -21,6 +19,4 @@ CMake
 
 ToDo
 ----
-- source documentation
-- cmake module documentation
-- command usage
+- more source documentation
