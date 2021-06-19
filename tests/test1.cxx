@@ -23,7 +23,7 @@ static int test() {
                             Sequence(
                                 Const("create"),
                                 Optional(Const("-l"), Var() >> [&] (const char * value) { std::cout << "create -l=" << value << std::endl; }) >> [&] { std::cout << "use language" << std::endl; },
-                                Loop(Const("-i"), Var() >> [&] (const char * value) { std::cout << "create -i=" << value << std::endl; }),
+                                Loop(Sequence(Const("-i"), Var() >> [&] (const char * value) { std::cout << "create -i=" << value << std::endl; })),
                                 Var() >> [&] (const char * value) { std::cout << "create " << value << std::endl; }
                             )
                         )
@@ -44,9 +44,10 @@ static int test() {
 
     auto result = cmd.parse(argc, argv);
 
+    result.printUsage(std::cout, "test1");
+
     if (result) { return 0; }
-    std::cout << "errorMessage=[" << result.errorMessage << "]" << std::endl;
-    std::cout << "usageMessage=[" << result.usageMessage << "]" << std::endl;
+
     return 1;
 }
 
