@@ -103,14 +103,14 @@ namespace CxxCli {
     *
     * A const will try compare an argument to the specified value, failing if comparison is not identical
     */
-    constexpr auto Const(const char * value) -> templates::Const_t { return templates::Const_t(value); }
+    constexpr auto Const(const char * value) -> templates::const_::Const_t { return templates::const_::Const_t(value); }
 
     /*
     * Creates a variable object
     *
     * A variable will map any argument given
     */
-    constexpr auto Var(const char * identifier = "") -> templates::Var_t { return templates::Var_t(identifier); }
+    constexpr auto Var(const char * identifier = "") -> templates::var::Var_t { return templates::var::Var_t(identifier); }
 
     /*
     * Creates a sequence object
@@ -118,8 +118,8 @@ namespace CxxCli {
     * A sequence will try to match the arguments with the specified subojects, failing if any is mismatched
     */
     template<typename ... subs_t>
-    constexpr auto Sequence(subs_t ... subs) -> templates::Sequence_t<void, false, subs_t...> {
-        return templates::Sequence_t<void, false, subs_t...>(Documentation_t<void>{}, std::tuple<subs_t...>{std::forward<subs_t>(subs)...});
+    constexpr auto Sequence(subs_t ... subs) -> templates::sequence::Sequence_t<void, false, subs_t...> {
+        return templates::sequence::Sequence_t<void, false, subs_t...>(Documentation_t<void>{}, std::tuple<subs_t...>{std::forward<subs_t>(subs)...});
     }
 
     /*
@@ -128,8 +128,8 @@ namespace CxxCli {
     * An option will try to match the arguments
     */
     template<typename sub_t>
-    constexpr auto Optional(sub_t sub) -> templates::Optional_t<void, false, sub_t> {
-        return templates::Optional_t<void, false, sub_t>(Documentation_t<void>{}, std::forward<sub_t>(sub));
+    constexpr auto Optional(sub_t sub) -> templates::optional::Optional_t<void, false, sub_t> {
+        return templates::optional::Optional_t<void, false, sub_t>(Documentation_t<void>{}, std::forward<sub_t>(sub));
     }
 
     /*
@@ -138,7 +138,7 @@ namespace CxxCli {
     * A loop will loop over the arguments until the next argument fails, returning a success
     */
     template<typename sub_t>
-    constexpr auto Loop(sub_t sub) -> templates::Loop_t<sub_t> { return templates::Loop_t<sub_t>(std::forward<sub_t>(sub)); }
+    constexpr auto Loop(sub_t sub) -> templates::loop::Loop_t<sub_t> { return templates::loop::Loop_t<sub_t>(std::forward<sub_t>(sub)); }
 
     /*
     * Creates a branch object with the specified subobjects
@@ -147,7 +147,7 @@ namespace CxxCli {
     * Stops immediately when a suboject successfully parses
     */
     template<typename ... subs_t>
-    constexpr auto Branch(subs_t ... subs) -> templates::Branch_t<subs_t...> { return templates::Branch_t<subs_t...>(std::forward<subs_t>(subs)...); }
+    constexpr auto Branch(subs_t ... subs) -> templates::branch::Branch_t<subs_t...> { return templates::branch::Branch_t<subs_t...>(std::forward<subs_t>(subs)...); }
 
     /*
     * Creates command object

@@ -11,8 +11,11 @@ namespace CxxCli {
     namespace templates {
 
         template<typename char_t, char_t... values>
-        struct string000 {
-            static constexpr const char_t chars[sizeof...(values) + 1] = { values..., 0 };
+        struct static_string {
+            static const char_t * chars() noexcept {
+                static const char_t value[sizeof...(values) + 1] = { values..., 0 };
+                return value;
+            }
         };
 
         template<typename char_t, char_t value, unsigned count, unsigned... indices>
@@ -21,7 +24,7 @@ namespace CxxCli {
         };
         template<typename char_t, char_t value, unsigned... indices>
         struct generate_param_pack_t<char_t, value, 0, indices...> {
-            using result = string000<char_t, indices...>;
+            using result = static_string<char_t, indices...>;
         };
 
         template<typename char_t>
@@ -31,6 +34,7 @@ namespace CxxCli {
     }
 
     namespace templates {
+
         enum struct ret { ok = 1, mismatch, error };
 
         struct parseResult {
@@ -40,6 +44,11 @@ namespace CxxCli {
 
         template<typename x>
         static void invokePrintUsage0(const void * v, std::ostream & out) { static_cast<const x *>(v)->printUsage(out, 0); }
+
+        template<typename x>
+        struct invokePrintUsage_t {
+            static void invoke(const void * v, std::ostream & out) { static_cast<const x *>(v)->printUsage(out, 0); }
+        };
 
         /*template<typename, typename T>
         struct is_callable {
@@ -131,7 +140,9 @@ namespace CxxCli {
             bool operator()(const char * value) const { *m_target = value; return true; }
         };
 
-        static void printIndent(std::ostream & out, int indent) { for (int i = 0; i < indent; ++i) { out << indent_char_t::chars; } }
+        static void printIndent(std::ostream & out, int indent) {
+            for (int i = 0; i < indent; ++i) { out << indent_char_t::chars(); }
+        }
 
         template<typename doc_t>
         struct printDoc2_t { static void print(std::ostream & out, const doc_t & doc, int) { out << doc; } };
@@ -167,9 +178,9 @@ namespace CxxCli {
         };
 
         template<typename doc_t>
-        static void printDoc0(const Documentation_t<doc_t> & doc, std::ostream & out, int indent) { printDoc2_t<std::decay<doc_t>::type>::print(out, doc.m_doc, indent); }
+        static inline void printDoc0(const Documentation_t<doc_t> & doc, std::ostream & out, int indent) { printDoc2_t<typename std::decay<doc_t>::type>::print(out, doc.m_doc, indent); }
         template<>
-        static void printDoc0<void>(const Documentation_t<void> &, std::ostream &, int) {}
+        inline void printDoc0<void>(const Documentation_t<void> &, std::ostream &, int) {}
 
         template<typename doc_t>
         struct Documentable_t {
@@ -205,253 +216,293 @@ namespace CxxCli {
             template<typename x> void operator()(const x &) const noexcept {}
         };
 
-        struct Const_t {
-            const char * m_value;
-            constexpr Const_t(const char * value) : m_value(value) {}
+    }
 
-            template<typename fn_t = NullCallbackFn_t>
-            ret parse(parseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = NullCallbackFn_t()) const {
-                if (i >= argc) {
-                    //r->errorMessage = "index out of bounds";
-                    //r->usageMessage = "";
-                    r->m_object = this;
-                    r->m_printUsage = invokePrintUsage0<Const_t>;
-                    return ret::mismatch;
-                }
-                if (std::strcmp(m_value, argv[i]) != 0) { return ret::mismatch; }
-                cb();
-                ++i;
-                return ret::ok;
-            }
+    namespace templates {
 
-            void printUsage(std::ostream & out, int) const { out << m_value; }
+        namespace const_ {
 
-            template<typename fn_t>
-            friend Callback_t<fn_t, Const_t> operator>>(Const_t c, fn_t fn) {
-                return Callback_t<fn_t, Const_t>(std::move(fn), std::move(c));
-            }
+            struct Const_t {
+                const char * m_value;
+                constexpr Const_t(const char * value) : m_value(value) {}
 
-        };
-
-        struct Var_t {
-            const char * m_identifier;
-            constexpr Var_t(const char * id) : m_identifier(id) {}
-
-            template<typename fn_t = NullCallbackFn_t>
-            ret parse(parseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = NullCallbackFn_t{}) const {
-                if (i >= argc) {
-                    //r->errorMessage = "index out of bounds";
-                    //r->usageMessage = "";
-                    r->m_object = this;
-                    r->m_printUsage = invokePrintUsage0<Var_t>;
-                    return ret::mismatch;
-                }
-                cb(argv[i]);
-                ++i;
-                return ret::ok;
-            }
-
-            void printUsage(std::ostream & out, int) const { out << '<' << m_identifier << '>'; }
-
-            template<typename fn_t>
-            friend Callback_t<fn_t, Var_t> operator>>(Var_t v, fn_t fn) {
-                return Callback_t<fn_t, Var_t>(std::move(fn), std::move(v));
-            }
-
-            template<typename scalar_t>
-            friend typename std::enable_if<std::is_scalar<scalar_t>::value, Callback_t<lambdaScalarParser<scalar_t>, Var_t>>::type
-                operator>>(Var_t v, scalar_t * target) {
-                return Callback_t<lambdaScalarParser<scalar_t>, Var_t>(lambdaScalarParser<scalar_t>{target}, std::move(v));
-            }
-
-            friend Callback_t<lambdaStringParser<const char *>, Var_t> operator>>(Var_t v, const char ** target) {
-                return Callback_t<lambdaStringParser<const char *>, Var_t>(lambdaStringParser<const char *>{target}, std::move(v));
-            }
-
-            template<typename char_t, typename traits_t, typename allocator_t>
-            friend Callback_t<lambdaStringParser<std::basic_string<char_t, traits_t, allocator_t>>, Var_t> operator>>(Var_t v, std::basic_string<char_t, traits_t, allocator_t> * target) {
-                return Callback_t<lambdaStringParser<std::basic_string<char_t, traits_t, allocator_t>>, Var_t>(lambdaStringParser<std::basic_string<char_t, traits_t, allocator_t>>{target}, std::move(v));
-            }
-
-        };
-
-        template<typename doc_t, bool usageAsList, typename ... subs_t>
-        struct Sequence_t : Documentable_t<doc_t> {
-            std::tuple<subs_t...> m_subs;
-            constexpr Sequence_t(Documentation_t<doc_t> doc, decltype(m_subs) subs) : Documentable_t<doc_t>(std::move(doc)), m_subs(std::move(subs)) {}
-
-            template<typename fn_t = NullCallbackFn_t>
-            ret parse(parseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = NullCallbackFn_t{}) const {
-                auto j = i;
-                auto retVal = parse<0>(m_subs, r, j, argc, argv);
-                if (retVal == ret::ok) {
-                    i = j;
+                template<typename fn_t = NullCallbackFn_t>
+                ret parse(parseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = NullCallbackFn_t()) const {
+                    if (i >= argc) {
+                        //r->errorMessage = "index out of bounds";
+                        //r->usageMessage = "";
+                        r->m_object = this;
+                        r->m_printUsage = invokePrintUsage0<Const_t>;
+                        return ret::mismatch;
+                    }
+                    if (std::strcmp(m_value, argv[i]) != 0) { return ret::mismatch; }
                     cb();
+                    ++i;
+                    return ret::ok;
                 }
-                return retVal;
-            }
 
-            template<int I>
-            static ret parse(const std::tuple<subs_t...> & subs, parseResult * r, int & i, int argc, const char * const * argv) {
-                auto retVal = std::get<I>(subs).parse(r, i, argc, argv);
-                if (retVal != ret::ok) { return I == 0 ? ret::mismatch : (/*strictMatch*/true ? ret::error : retVal); }
-                return parse<I + 1>(subs, r, i, argc, argv);
-            }
+                void printUsage(std::ostream & out, int) const { out << m_value; }
 
-            template<>
-            static ret parse<sizeof...(subs_t)>(const std::tuple<subs_t...> &, parseResult *, int &, int, const char * const *) { return ret::ok; }
-
-            void printUsage(std::ostream & out, int indent) const { printUsage0<0>(m_subs, getDoc(), out, indent); }
-
-            template<int I>
-            static void printUsage0(const std::tuple<subs_t...> & subs, const Documentation_t<doc_t> & doc, std::ostream & out, int indent) {
-                if (usageAsList) {
-                    out << '\n';
-                    printIndent(out, indent);
+                template<typename fn_t>
+                friend Callback_t<fn_t, Const_t> operator>>(Const_t c, fn_t fn) {
+                    return Callback_t<fn_t, Const_t>(std::move(fn), std::move(c));
                 }
-                std::get<I>(subs).printUsage(out, indent + (usageAsList ? 1 : 0));
-                if (!usageAsList && (sizeof...(subs_t) - 1 != I)) { out << ' '; }
-                printUsage0<I + 1>(subs, doc, out, indent);
-            }
 
-            template<>
-            static void printUsage0<sizeof...(subs_t)>(const std::tuple<subs_t...> &, const Documentation_t<doc_t> & doc, std::ostream & out, int indent) {
-                if (!std::is_same<void, doc_t>::value) { out << ' '; }
-                printDoc0(doc, out, indent);
-            }
+            };
 
-            // attach lambda
-            template<typename fn_t>
-            friend Callback_t<fn_t, Sequence_t> operator>>(Sequence_t c, fn_t fn) {
-                return Callback_t<fn_t, Sequence_t>(std::move(fn), std::move(c));
-            }
+        }
 
-            // set print as list
-            template<typename x = typename std::enable_if<!usageAsList, Sequence_t<doc_t, true, subs_t...>>::type>
-            friend x operator&(Sequence_t c, UsageAsList_t) {
-                return x(std::move(c.getDoc()), std::move(c.m_subs));
-            }
+        namespace var {
 
-            // set doc
-            template<typename newDoc_t>
-            friend Sequence_t<newDoc_t, usageAsList, subs_t...> operator&(Sequence_t c, Documentation_t<newDoc_t> doc) {
-                return Sequence_t<newDoc_t, usageAsList, subs_t...>(std::move(doc), std::move(c.m_subs));
-            }
+            struct Var_t {
+                const char * m_identifier;
+                constexpr Var_t(const char * id) : m_identifier(id) {}
 
-        };
-
-        template<typename doc_t, bool usageAsList, typename sub_t>
-        struct Optional_t : Documentable_t<doc_t> {
-            sub_t m_sub;
-            constexpr Optional_t(Documentation_t<doc_t> doc, sub_t sub) : Documentable_t<doc_t>(std::move(doc)), m_sub(std::move(sub)) {}
-
-            template<typename fn_t = NullCallbackFn_t>
-            ret parse(parseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = NullCallbackFn_t{}) const {
-                auto j = i;
-                auto retVal = m_sub.parse(r, j, argc, argv);
-                if (retVal == ret::ok) {
-                    i = j;
-                    cb();
+                template<typename fn_t = NullCallbackFn_t>
+                ret parse(parseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = NullCallbackFn_t{}) const {
+                    if (i >= argc) {
+                        //r->errorMessage = "index out of bounds";
+                        //r->usageMessage = "";
+                        r->m_object = this;
+                        r->m_printUsage = invokePrintUsage0<Var_t>;
+                        return ret::mismatch;
+                    }
+                    cb(argv[i]);
+                    ++i;
+                    return ret::ok;
                 }
-                return ret::ok;
-            }
 
-            void printUsage(std::ostream & out, int indent) const {
-                out << '[';
-                m_sub.printUsage(out, usageAsList ? (indent + 1) : indent);
-                out << ']';
-                if (!std::is_same<void, doc_t>::value) {
-                    out << ' ';
-                    printDoc0(getDoc(), out, indent);
+                void printUsage(std::ostream & out, int) const { out << '<' << m_identifier << '>'; }
+
+                template<typename fn_t>
+                friend Callback_t<fn_t, Var_t> operator>>(Var_t v, fn_t fn) {
+                    return Callback_t<fn_t, Var_t>(std::move(fn), std::move(v));
                 }
-            }
 
-            template<typename fn_t>
-            friend Callback_t<fn_t, Optional_t> operator>>(Optional_t c, fn_t fn) {
-                return Callback_t<fn_t, Optional_t>(std::move(fn), std::move(c));
-            }
+                template<typename scalar_t>
+                friend typename std::enable_if<std::is_scalar<scalar_t>::value, Callback_t<lambdaScalarParser<scalar_t>, Var_t>>::type
+                    operator>>(Var_t v, scalar_t * target) {
+                    return Callback_t<lambdaScalarParser<scalar_t>, Var_t>(lambdaScalarParser<scalar_t>{target}, std::move(v));
+                }
 
-            // set print as list
-            template<typename x = typename std::enable_if<!usageAsList, Optional_t<doc_t, true, sub_t>>::type>
-            friend x operator&(Optional_t c, UsageAsList_t) {
-                return x(std::move(c.getDoc()), std::move(c.m_subs));
-            }
+                friend Callback_t<lambdaStringParser<const char *>, Var_t> operator>>(Var_t v, const char ** target) {
+                    return Callback_t<lambdaStringParser<const char *>, Var_t>(lambdaStringParser<const char *>{target}, std::move(v));
+                }
 
-            // set doc
-            template<typename newDoc_t, typename x = Optional_t<newDoc_t, usageAsList, sub_t>>
-            friend x operator&(Optional_t c, Documentation_t<newDoc_t> doc) {
-                return x(std::move(doc), std::move(c.m_sub));
-            }
+                template<typename char_t, typename traits_t, typename allocator_t>
+                friend Callback_t<lambdaStringParser<std::basic_string<char_t, traits_t, allocator_t>>, Var_t> operator>>(Var_t v, std::basic_string<char_t, traits_t, allocator_t> * target) {
+                    return Callback_t<lambdaStringParser<std::basic_string<char_t, traits_t, allocator_t>>, Var_t>(lambdaStringParser<std::basic_string<char_t, traits_t, allocator_t>>{target}, std::move(v));
+                }
 
-        };
+            };
 
-        template<typename sub_t>
-        struct Loop_t {
-            sub_t m_sub;
-            constexpr Loop_t(sub_t sub) : m_sub(std::move(sub)) {}
+        }
 
-            template<typename fn_t = NullCallbackFn_t>
-            ret parse(parseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = NullCallbackFn_t{}) const {
-                while (true) {
+        namespace sequence {
+
+            template<int I, int L, typename ... subs_t>
+            struct parse_t {
+                static ret parse(const std::tuple<subs_t...> & subs, parseResult * r, int & i, int argc, const char * const * argv) {
+                    auto retVal = std::get<I>(subs).parse(r, i, argc, argv);
+                    if (retVal != ret::ok) { return I == 0 ? ret::mismatch : (/*strictMatch*/true ? ret::error : retVal); }
+                    return parse_t<I + 1, L, subs_t...>::parse(subs, r, i, argc, argv);
+                }
+            };
+            template<int L, typename ... subs_t>
+            struct parse_t<L, L, subs_t...> {
+                static ret parse(const std::tuple<subs_t...> &, parseResult *, int &, int, const char * const *) { return ret::ok; }
+            };
+
+            template<int I, int L, bool usageAsList, typename doc_t, typename ... subs_t>
+            struct printUsage_t {
+                static void print(const std::tuple<subs_t...> & subs, const Documentation_t<doc_t> & doc, std::ostream & out, int indent) {
+                    if (usageAsList) {
+                        out << '\n';
+                        printIndent(out, indent);
+                    }
+                    std::get<I>(subs).printUsage(out, indent + (usageAsList ? 1 : 0));
+                    if (!usageAsList && (sizeof...(subs_t) - 1 != I)) { out << ' '; }
+                    printUsage_t<I + 1, L, usageAsList, doc_t, subs_t...>::print(subs, doc, out, indent);
+                }
+            };
+            template<int L, bool usageAsList, typename doc_t, typename ... subs_t>
+            struct printUsage_t<L, L, usageAsList, doc_t, subs_t...> {
+                static void print(const std::tuple<subs_t...> &, const Documentation_t<doc_t> & doc, std::ostream & out, int indent) {
+                    if (!std::is_same<void, doc_t>::value) { out << ' '; }
+                    printDoc0(doc, out, indent);
+                }
+            };
+
+            template<typename doc_t, bool usageAsList, typename ... subs_t>
+            struct Sequence_t : Documentable_t<doc_t> {
+                std::tuple<subs_t...> m_subs;
+                constexpr Sequence_t(Documentation_t<doc_t> doc, decltype(m_subs) subs) : Documentable_t<doc_t>(std::move(doc)), m_subs(std::move(subs)) {}
+
+                template<typename fn_t = NullCallbackFn_t>
+                ret parse(parseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = NullCallbackFn_t{}) const {
+                    auto j = i;
+                    auto retVal = parse_t<0, sizeof...(subs_t), subs_t...>::parse(m_subs, r, j, argc, argv);
+                    if (retVal == ret::ok) {
+                        i = j;
+                        cb();
+                    }
+                    return retVal;
+                }
+
+                void printUsage(std::ostream & out, int indent) const { printUsage_t<0, sizeof...(subs_t), usageAsList, doc_t, subs_t...>::print(m_subs, Documentable_t<doc_t>::getDoc(), out, indent); }
+
+                // attach lambda
+                template<typename fn_t>
+                friend Callback_t<fn_t, Sequence_t> operator>>(Sequence_t c, fn_t fn) {
+                    return Callback_t<fn_t, Sequence_t>(std::move(fn), std::move(c));
+                }
+
+                // set print as list
+                template<typename x = typename std::enable_if<true, Sequence_t<doc_t, true, subs_t...>>::type>
+                friend x operator&(Sequence_t c, UsageAsList_t) {
+                    return x(std::move(c.getDoc()), std::move(c.m_subs));
+                }
+
+                // set doc
+                template<typename newDoc_t>
+                friend Sequence_t<newDoc_t, usageAsList, subs_t...> operator&(Sequence_t c, Documentation_t<newDoc_t> doc) {
+                    return Sequence_t<newDoc_t, usageAsList, subs_t...>(std::move(doc), std::move(c.m_subs));
+                }
+
+            };
+
+        }
+
+        namespace optional {
+
+            template<typename doc_t, bool usageAsList, typename sub_t>
+            struct Optional_t : Documentable_t<doc_t> {
+                sub_t m_sub;
+                constexpr Optional_t(Documentation_t<doc_t> doc, sub_t sub) : Documentable_t<doc_t>(std::move(doc)), m_sub(std::move(sub)) {}
+
+                template<typename fn_t = NullCallbackFn_t>
+                ret parse(parseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = NullCallbackFn_t{}) const {
                     auto j = i;
                     auto retVal = m_sub.parse(r, j, argc, argv);
-                    if (retVal != ret::ok || i == j) { return ret::ok; }
-                    i = j;
-                    cb();
+                    if (retVal == ret::ok) {
+                        i = j;
+                        cb();
+                    }
+                    return ret::ok;
                 }
-            }
 
-            void printUsage(std::ostream & out, int indent) const { m_sub.printUsage(out, indent); }
-
-            template<typename fn_t>
-            friend Callback_t<fn_t, Loop_t> operator>>(Loop_t c, fn_t fn) {
-                return Callback_t<fn_t, Loop_t>(std::move(fn), std::move(c));
-            }
-
-        };
-
-        template<typename ... subs_t>
-        struct Branch_t {
-            std::tuple<subs_t...> m_subs;
-            constexpr Branch_t(subs_t ... subs) : m_subs(std::forward<subs_t>(subs)...) {}
-
-            template<typename fn_t = NullCallbackFn_t>
-            ret parse(parseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = NullCallbackFn_t{}) const {
-                auto j = i;
-                auto retVal = parse<0>(*this, r, j, argc, argv);
-                if (retVal == ret::ok) {
-                    i = j;
-                    cb();
+                void printUsage(std::ostream & out, int indent) const {
+                    out << '[';
+                    m_sub.printUsage(out, usageAsList ? (indent + 1) : indent);
+                    out << ']';
+                    if (!std::is_same<void, doc_t>::value) {
+                        out << ' ';
+                        printDoc0(Documentable_t<doc_t>::getDoc(), out, indent);
+                    }
                 }
-                return retVal;
-            }
 
-            template<int I>
-            static ret parse(const Branch_t & b, parseResult * r, int & i, int argc, const char * const * argv) {
-                auto retVal = std::get<I>(b.m_subs).parse(r, i, argc, argv);
-                if (retVal == ret::mismatch) { return parse<I + 1>(b, r, i, argc, argv); }
-                return retVal;
-            }
+                template<typename fn_t>
+                friend Callback_t<fn_t, Optional_t> operator>>(Optional_t c, fn_t fn) {
+                    return Callback_t<fn_t, Optional_t>(std::move(fn), std::move(c));
+                }
 
-            template<>
-            static ret parse<sizeof...(subs_t)>(const Branch_t & b, parseResult * r, int &, int, const char * const *) {
-                r->m_object = &b;
-                r->m_printUsage = invokePrintUsage0<Branch_t>;
-                return ret::error;
-            }
+                // set print as list
+                template<typename x = typename std::enable_if<!usageAsList, Optional_t<doc_t, true, sub_t>>::type>
+                friend x operator&(Optional_t c, UsageAsList_t) {
+                    return x(std::move(c.getDoc()), std::move(c.m_subs));
+                }
 
-            void printUsage(std::ostream & out, int indent) const {
-                out << "{";
-                Sequence_t<void, false, subs_t...>::printUsage0<0>(m_subs, Documentation_t<void>{}, out, indent);
-                out << '}';
-            }
+                // set doc
+                template<typename newDoc_t, typename x = Optional_t<newDoc_t, usageAsList, sub_t>>
+                friend x operator&(Optional_t c, Documentation_t<newDoc_t> doc) {
+                    return x(std::move(doc), std::move(c.m_sub));
+                }
 
-            template<typename fn_t>
-            friend Callback_t<fn_t, Branch_t> operator>>(Branch_t c, fn_t fn) {
-                return Callback_t<fn_t, Branch_t>(std::move(fn), std::move(c));
-            }
+            };
 
-        };
+        }
+
+        namespace loop {
+
+            template<typename sub_t>
+            struct Loop_t {
+                sub_t m_sub;
+                constexpr Loop_t(sub_t sub) : m_sub(std::move(sub)) {}
+
+                template<typename fn_t = NullCallbackFn_t>
+                ret parse(parseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = NullCallbackFn_t{}) const {
+                    while (true) {
+                        auto j = i;
+                        auto retVal = m_sub.parse(r, j, argc, argv);
+                        if (retVal != ret::ok || i == j) { return ret::ok; }
+                        i = j;
+                        cb();
+                    }
+                }
+
+                void printUsage(std::ostream & out, int indent) const { m_sub.printUsage(out, indent); }
+
+                template<typename fn_t>
+                friend Callback_t<fn_t, Loop_t> operator>>(Loop_t c, fn_t fn) {
+                    return Callback_t<fn_t, Loop_t>(std::move(fn), std::move(c));
+                }
+
+            };
+
+        }
+
+        namespace branch {
+
+            template<int I, int L, typename ... subs_t>
+            struct parse_t;
+
+            template<typename ... subs_t>
+            struct Branch_t {
+                std::tuple<subs_t...> m_subs;
+                constexpr Branch_t(subs_t ... subs) : m_subs(std::forward<subs_t>(subs)...) {}
+
+                template<typename fn_t = NullCallbackFn_t>
+                ret parse(parseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = NullCallbackFn_t{}) const {
+                    auto j = i;
+                    auto retVal = parse_t<0, sizeof...(subs_t), subs_t...>::parse(*this, r, j, argc, argv);
+                    if (retVal == ret::ok) {
+                        i = j;
+                        cb();
+                    }
+                    return retVal;
+                }
+
+                void printUsage(std::ostream & out, int indent) const {
+                    out << "{";
+                    sequence::printUsage_t<0, sizeof...(subs_t), false, void, subs_t...>::print(m_subs, Documentation_t<void>{}, out, indent);
+                    out << '}';
+                }
+
+                template<typename fn_t>
+                friend Callback_t<fn_t, Branch_t> operator>>(Branch_t c, fn_t fn) {
+                    return Callback_t<fn_t, Branch_t>(std::move(fn), std::move(c));
+                }
+
+            };
+
+            template<int I, int L, typename ... subs_t>
+            struct parse_t {
+                static ret parse(const Branch_t<subs_t...> & b, parseResult * r, int & i, int argc, const char * const * argv) {
+                    auto retVal = std::get<I>(b.m_subs).parse(r, i, argc, argv);
+                    if (retVal == ret::mismatch) { return parse_t<I + 1, L, subs_t...>::parse(b, r, i, argc, argv); }
+                    return retVal;
+                }
+            };
+            template<int L, typename ... subs_t>
+            struct parse_t<L, L, subs_t...> {
+                static ret parse(const Branch_t<subs_t...> & b, parseResult * r, int &, int, const char * const *) {
+                    r->m_object = &b;
+                    r->m_printUsage = invokePrintUsage0<Branch_t<subs_t...>>;
+                    return ret::error;
+                }
+            };
+
+        }
 
     }
 
