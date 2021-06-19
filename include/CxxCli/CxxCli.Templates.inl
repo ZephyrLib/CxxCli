@@ -275,7 +275,7 @@ namespace CxxCli {
 
         };
 
-        template<typename doc_t, bool printAsList, typename ... subs_t>
+        template<typename doc_t, bool usageAsList, typename ... subs_t>
         struct Sequence_t : Documentable_t<doc_t> {
             std::tuple<subs_t...> m_subs;
             constexpr Sequence_t(Documentation_t<doc_t> doc, decltype(m_subs) subs) : Documentable_t<doc_t>(std::move(doc)), m_subs(std::move(subs)) {}
@@ -305,12 +305,12 @@ namespace CxxCli {
 
             template<int I>
             static void printUsage0(const std::tuple<subs_t...> & subs, const Documentation_t<doc_t> & doc, std::ostream & out, int indent) {
-                if (printAsList) {
+                if (usageAsList) {
                     out << '\n';
                     printIndent(out, indent);
                 }
-                std::get<I>(subs).printUsage(out, indent + (printAsList ? 1 : 0));
-                if (!printAsList && (sizeof...(subs_t) - 1 != I)) { out << ' '; }
+                std::get<I>(subs).printUsage(out, indent + (usageAsList ? 1 : 0));
+                if (!usageAsList && (sizeof...(subs_t) - 1 != I)) { out << ' '; }
                 printUsage0<I + 1>(subs, doc, out, indent);
             }
 
@@ -327,28 +327,28 @@ namespace CxxCli {
             }
 
             // set print as list
-            template<typename x = typename std::enable_if<!printAsList, Sequence_t<doc_t, true, subs_t...>>::type>
+            template<typename x = typename std::enable_if<!usageAsList, Sequence_t<doc_t, true, subs_t...>>::type>
             friend x operator&(Sequence_t c, UsageAsList_t) {
                 return x(std::move(c.getDoc()), std::move(c.m_subs));
             }
 
             // set doc
             template<typename newDoc_t>
-            friend Sequence_t<newDoc_t, printAsList, subs_t...> operator&(Sequence_t c, Documentation_t<newDoc_t> doc) {
-                return Sequence_t<newDoc_t, printAsList, subs_t...>(std::move(doc), std::move(c.m_subs));
+            friend Sequence_t<newDoc_t, usageAsList, subs_t...> operator&(Sequence_t c, Documentation_t<newDoc_t> doc) {
+                return Sequence_t<newDoc_t, usageAsList, subs_t...>(std::move(doc), std::move(c.m_subs));
             }
 
         };
 
-        template<typename doc_t, bool printAsList, typename ... subs_t>
+        template<typename doc_t, bool usageAsList, typename sub_t>
         struct Optional_t : Documentable_t<doc_t> {
-            std::tuple<subs_t...> m_subs;
-            constexpr Optional_t(Documentation_t<doc_t> doc, decltype(m_subs) subs) : Documentable_t<doc_t>(std::move(doc)), m_subs(std::move(subs)) {}
+            sub_t m_sub;
+            constexpr Optional_t(Documentation_t<doc_t> doc, sub_t sub) : Documentable_t<doc_t>(std::move(doc)), m_sub(std::move(sub)) {}
 
             template<typename fn_t = NullCallbackFn_t>
             ret parse(parseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = NullCallbackFn_t{}) const {
                 auto j = i;
-                auto retVal = parse<0>(m_subs, r, j, argc, argv);
+                auto retVal = m_sub.parse(r, j, argc, argv);
                 if (retVal == ret::ok) {
                     i = j;
                     cb();
@@ -356,19 +356,9 @@ namespace CxxCli {
                 return ret::ok;
             }
 
-            template<int I>
-            static ret parse(const std::tuple<subs_t...> & subs, parseResult * r, int & i, int argc, const char * const * argv) {
-                auto retVal = std::get<I>(subs).parse(r, i, argc, argv);
-                if (retVal != ret::ok) { return ret::mismatch; }
-                return parse<I + 1>(subs, r, i, argc, argv);
-            }
-
-            template<>
-            static ret parse<sizeof...(subs_t)>(const std::tuple<subs_t...> &, parseResult *, int &, int, const char * const *) { return ret::ok; }
-
             void printUsage(std::ostream & out, int indent) const {
                 out << '[';
-                Sequence_t<void, printAsList, subs_t...>::printUsage0<0>(m_subs, Documentation_t<void>{}, out, indent);
+                m_sub.printUsage(out, usageAsList ? (indent + 1) : indent);
                 out << ']';
                 if (!std::is_same<void, doc_t>::value) {
                     out << ' ';
@@ -382,15 +372,15 @@ namespace CxxCli {
             }
 
             // set print as list
-            template<typename x = typename std::enable_if<!printAsList, Optional_t<doc_t, true, subs_t...>>::type>
+            template<typename x = typename std::enable_if<!usageAsList, Optional_t<doc_t, true, sub_t>>::type>
             friend x operator&(Optional_t c, UsageAsList_t) {
                 return x(std::move(c.getDoc()), std::move(c.m_subs));
             }
 
             // set doc
-            template<typename newDoc_t, typename x = Optional_t<newDoc_t, printAsList, subs_t...>>
+            template<typename newDoc_t, typename x = Optional_t<newDoc_t, usageAsList, sub_t>>
             friend x operator&(Optional_t c, Documentation_t<newDoc_t> doc) {
-                return x(std::move(doc), std::move(c.m_subs));
+                return x(std::move(doc), std::move(c.m_sub));
             }
 
         };

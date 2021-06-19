@@ -1,5 +1,5 @@
 
-#include <iostream>
+#include <cassert>
 
 #include <CxxCli/CxxCli.hpp>
 
@@ -10,22 +10,35 @@ static int test() {
 
     using namespace CxxCli;
 
+    const char * identifier = nullptr;
+    const char * target = nullptr;
+    const char * src_name = nullptr;
+    const char * header_name = nullptr;
+    const char * output_dir = nullptr;
+
     auto cmd = Command(
         Loop(
             Sequence(
-                Optional(Const("--identifier"), Var() >> [&] (const char * v) { std::cout << "identifier=" << v << std::endl; }),
-                Optional(Const("--target"), Var() >> [&] (const char * v) { std::cout << "target=" << v << std::endl; }),
-                Optional(Const("--src-name"), Var() >> [&] (const char * v) { std::cout << "src-name=" << v << std::endl; }),
-                Optional(Const("--header-name"), Var() >> [&] (const char * v) { std::cout << "header-name=" << v << std::endl; }),
-                Optional(Const("--output-dir"), Var() >> [&] (const char * v) { std::cout << "output-dir=" << v << std::endl; })
+                Optional(Sequence(Const("--identifier"), Var() >> &identifier)),
+                Optional(Sequence(Const("--target"), Var() >> &target)),
+                Optional(Sequence(Const("--src-name"), Var() >> &src_name)),
+                Optional(Sequence(Const("--header-name"), Var() >> &header_name)),
+                Optional(Sequence(Const("--output-dir"), Var() >> &output_dir))
             )
         )
     );
 
     auto result = cmd.parse(argc, argv);
 
-    if (result) { return 0; }
-    return 1;
+    assert(result);
+
+    assert(identifier == argv[9]);
+    assert(target == argv[3]);
+    assert(src_name == argv[5]);
+    assert(header_name == argv[7]);
+    assert(output_dir == argv[1]);
+
+    return 0;
 }
 
 int main(int argc, char ** argv) { return test(); }
