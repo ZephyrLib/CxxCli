@@ -1,4 +1,8 @@
 
+#ifndef HEADER_CXXCLI
+#error "illegal include"
+#endif
+
 #include <tuple>
 #include <cstdlib>
 #include <utility>
@@ -8,7 +12,7 @@
 
 namespace CxxCli {
 
-    namespace templates {
+    namespace details {
 
         template<typename char_t, char_t... values>
         struct static_string {
@@ -31,9 +35,14 @@ namespace CxxCli {
         using indent_t = typename generate_param_pack_t<char_t, (CXXCLI_INDENT_CHAR_VALUE), (CXXCLI_INDENT_LENGTH)>::result;
         using indent_char_t = indent_t<char>;
 
+        template<typename x>
+        static constexpr bool or_parameters(x a) { return a; }
+        template<typename x, typename... args_t>
+        static constexpr bool or_parameters(x a, args_t... args) { return a || or_parameters(args...); }
+
     }
 
-    namespace templates {
+    namespace details {
 
         enum struct ret { ok = 1, mismatch, error };
 
@@ -156,14 +165,18 @@ namespace CxxCli {
                             out << '\n';
                             printIndent(out, indent);
                         }
+                        out << "# ";
                         out.write(j, i - j);
                         j = i + 1;
                         nl = true;
-                    } else if (*i == 0) {
+                        continue;
+                    }
+                    if (*i == 0) {
                         if (nl) {
                             out << '\n';
                             printIndent(out, indent);
                         }
+                        out << "# ";
                         out.write(j, i - j);
                         break;
                     }
@@ -200,6 +213,10 @@ namespace CxxCli {
 
         template<typename fn_t, typename sub_t>
         struct Callback_t {
+            static constexpr bool usageAsList = sub_t::usageAsList;
+            static constexpr bool createsScope = sub_t::createsScope;
+            static constexpr int containedObjectCount = sub_t::containedObjectCount;
+
             fn_t m_fn;
             sub_t m_sub;
             constexpr Callback_t(fn_t fn, sub_t sub) : m_fn(std::move(fn)), m_sub(std::move(sub)) {}
@@ -218,11 +235,15 @@ namespace CxxCli {
 
     }
 
-    namespace templates {
+    namespace details {
 
         namespace const_ {
 
             struct Const_t {
+                static constexpr bool usageAsList = false;
+                static constexpr bool createsScope = false;
+                static constexpr int containedObjectCount = 0;
+
                 const char * m_value;
                 constexpr Const_t(const char * value) : m_value(value) {}
 
@@ -255,6 +276,10 @@ namespace CxxCli {
         namespace var {
 
             struct Var_t {
+                static constexpr bool usageAsList = false;
+                static constexpr bool createsScope = false;
+                static constexpr int containedObjectCount = 0;
+
                 const char * m_identifier;
                 constexpr Var_t(const char * id) : m_identifier(id) {}
 
@@ -320,21 +345,38 @@ namespace CxxCli {
                         out << '\n';
                         printIndent(out, indent);
                     }
-                    std::get<I>(subs).printUsage(out, indent + (usageAsList ? 1 : 0));
-                    if (!usageAsList && (sizeof...(subs_t) - 1 != I)) { out << ' '; }
+                    std::get<I>(subs).printUsage(out, indent);
+                    if (sizeof...(subs_t) - 1 != I) {
+                        if (!usageAsList) {
+                            out << ' ';
+                        }
+                    }
                     printUsage_t<I + 1, L, usageAsList, doc_t, subs_t...>::print(subs, doc, out, indent);
                 }
             };
             template<int L, bool usageAsList, typename doc_t, typename ... subs_t>
             struct printUsage_t<L, L, usageAsList, doc_t, subs_t...> {
                 static void print(const std::tuple<subs_t...> &, const Documentation_t<doc_t> & doc, std::ostream & out, int indent) {
-                    if (!std::is_same<void, doc_t>::value) { out << ' '; }
-                    printDoc0(doc, out, indent);
+                    if (usageAsList) {
+                        out << '\n';
+                        printIndent(out, indent + 1);
+                    } else {
+                        out << ' ';
+                    }
+                    printDoc0(doc, out, indent + 1);
                 }
             };
+            template<int L, bool usageAsList, typename ... subs_t>
+            struct printUsage_t<L, L, usageAsList, void, subs_t...> {
+                static void print(const std::tuple<subs_t...> &, Documentation_t<void>, std::ostream &, int) {}
+            };
 
-            template<typename doc_t, bool usageAsList, typename ... subs_t>
+            template<typename doc_t, bool usageAsList0, typename ... subs_t>
             struct Sequence_t : Documentable_t<doc_t> {
+                static constexpr bool usageAsList = usageAsList0 || or_parameters(subs_t::usageAsList...);
+                static constexpr bool createsScope = false;
+                static constexpr int containedObjectCount = sizeof...(subs_t);
+
                 std::tuple<subs_t...> m_subs;
                 constexpr Sequence_t(Documentation_t<doc_t> doc, decltype(m_subs) subs) : Documentable_t<doc_t>(std::move(doc)), m_subs(std::move(subs)) {}
 
@@ -375,10 +417,15 @@ namespace CxxCli {
 
         namespace optional {
 
-            template<typename doc_t, bool usageAsList, typename sub_t>
-            struct Optional_t : Documentable_t<doc_t> {
+            template<typename sub_t>
+            struct Optional_t {
+                static constexpr bool usageAsList = sub_t::usageAsList;
+                static constexpr bool createsScope = true;
+                static constexpr int containedObjectCount = 1;
+
                 sub_t m_sub;
-                constexpr Optional_t(Documentation_t<doc_t> doc, sub_t sub) : Documentable_t<doc_t>(std::move(doc)), m_sub(std::move(sub)) {}
+
+                constexpr Optional_t(sub_t sub) : m_sub(std::move(sub)) {}
 
                 template<typename fn_t = NullCallbackFn_t>
                 ret parse(parseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = NullCallbackFn_t{}) const {
@@ -393,29 +440,21 @@ namespace CxxCli {
 
                 void printUsage(std::ostream & out, int indent) const {
                     out << '[';
-                    m_sub.printUsage(out, usageAsList ? (indent + 1) : indent);
-                    out << ']';
-                    if (!std::is_same<void, doc_t>::value) {
-                        out << ' ';
-                        printDoc0(Documentable_t<doc_t>::getDoc(), out, indent);
+                    if (usageAsList && sub_t::createsScope) {
+                        out << '\n';
+                        printIndent(out, indent + 1);
                     }
+                    m_sub.printUsage(out, indent + (usageAsList ? 1 : 0));
+                    if (usageAsList) {
+                        out << '\n';
+                        printIndent(out, indent);
+                    }
+                    out << ']';
                 }
 
                 template<typename fn_t>
                 friend Callback_t<fn_t, Optional_t> operator>>(Optional_t c, fn_t fn) {
                     return Callback_t<fn_t, Optional_t>(std::move(fn), std::move(c));
-                }
-
-                // set print as list
-                template<typename x = typename std::enable_if<!usageAsList, Optional_t<doc_t, true, sub_t>>::type>
-                friend x operator&(Optional_t c, UsageAsList_t) {
-                    return x(std::move(c.getDoc()), std::move(c.m_subs));
-                }
-
-                // set doc
-                template<typename newDoc_t, typename x = Optional_t<newDoc_t, usageAsList, sub_t>>
-                friend x operator&(Optional_t c, Documentation_t<newDoc_t> doc) {
-                    return x(std::move(doc), std::move(c.m_sub));
                 }
 
             };
@@ -426,6 +465,10 @@ namespace CxxCli {
 
             template<typename sub_t>
             struct Loop_t {
+                static constexpr bool usageAsList = sub_t::usageAsList;
+                static constexpr bool createsScope = true;
+                static constexpr int containedObjectCount = 1;
+
                 sub_t m_sub;
                 constexpr Loop_t(sub_t sub) : m_sub(std::move(sub)) {}
 
@@ -440,7 +483,19 @@ namespace CxxCli {
                     }
                 }
 
-                void printUsage(std::ostream & out, int indent) const { m_sub.printUsage(out, indent); }
+                void printUsage(std::ostream & out, int indent) const {
+                    out << '[';
+                    if (usageAsList && sub_t::createsScope) {
+                        out << '\n';
+                        printIndent(out, indent + 1);
+                    }
+                    m_sub.printUsage(out, usageAsList ? (indent + 1) : indent);
+                    if (usageAsList) {
+                        out << '\n';
+                        printIndent(out, indent);
+                    }
+                    out << "]...";
+                }
 
                 template<typename fn_t>
                 friend Callback_t<fn_t, Loop_t> operator>>(Loop_t c, fn_t fn) {
@@ -456,8 +511,49 @@ namespace CxxCli {
             template<int I, int L, typename ... subs_t>
             struct parse_t;
 
+            template<int I, int L, bool usageAsList, typename doc_t, typename ... subs_t>
+            struct printUsage_t {
+                static void print(const std::tuple<subs_t...> & subs, const Documentation_t<doc_t> & doc, std::ostream & out, int indent) {
+                    if (usageAsList && std::tuple_element<I, std::tuple<subs_t...>>::type::createsScope) {
+                        out << '\n';
+                        printIndent(out, indent + 1);
+                    }
+                    std::get<I>(subs).printUsage(out, indent);
+                    if (sizeof...(subs_t) - 1 != I) {
+                        if (usageAsList) {
+                            out << "\n";
+                            printIndent(out, indent);
+                            out << "| ";
+                        } else {
+                            out << " | ";
+                        }
+                    }
+                    printUsage_t<I + 1, L, usageAsList, doc_t, subs_t...>::print(subs, doc, out, indent);
+                }
+            };
+            template<int L, bool usageAsList, typename doc_t, typename ... subs_t>
+            struct printUsage_t<L, L, usageAsList, doc_t, subs_t...> {
+                static void print(const std::tuple<subs_t...> &, const Documentation_t<doc_t> & doc, std::ostream & out, int indent) {
+                    if (usageAsList) {
+                        out << '\n';
+                        printIndent(out, indent + 1);
+                    } else {
+                        out << ' ';
+                    }
+                    printDoc0(doc, out, indent + 1);
+                }
+            };
+            template<int L, bool usageAsList, typename ... subs_t>
+            struct printUsage_t<L, L, usageAsList, void, subs_t...> {
+                static void print(const std::tuple<subs_t...> &, Documentation_t<void>, std::ostream &, int) {}
+            };
+
             template<typename ... subs_t>
             struct Branch_t {
+                static constexpr bool usageAsList = or_parameters(subs_t::usageAsList...);
+                static constexpr bool createsScope = true;
+                static constexpr int containedObjectCount = sizeof...(subs_t);
+
                 std::tuple<subs_t...> m_subs;
                 constexpr Branch_t(subs_t ... subs) : m_subs(std::forward<subs_t>(subs)...) {}
 
@@ -473,8 +569,12 @@ namespace CxxCli {
                 }
 
                 void printUsage(std::ostream & out, int indent) const {
-                    out << "{";
-                    sequence::printUsage_t<0, sizeof...(subs_t), false, void, subs_t...>::print(m_subs, Documentation_t<void>{}, out, indent);
+                    out << '{';
+                    printUsage_t<0, sizeof...(subs_t), usageAsList, void, subs_t...>::print(m_subs, Documentation_t<void>{}, out, indent + (usageAsList ? 1 : 0));
+                    if (usageAsList) {
+                        out << '\n';
+                        printIndent(out, indent);
+                    }
                     out << '}';
                 }
 

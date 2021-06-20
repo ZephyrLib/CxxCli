@@ -34,10 +34,10 @@ namespace CxxCli {
     struct ParseResult {
     private:
         bool m_successfull = false;
-        templates::parseResult m_data;
+        details::parseResult m_data;
 
     public:
-        ParseResult(bool successfull = false, templates::parseResult data = { 0 }) : m_successfull(successfull), m_data(data) {}
+        ParseResult(bool successfull = false, details::parseResult data = { 0 }) : m_successfull(successfull), m_data(data) {}
 
         void printUsage(std::ostream & out, const char * executableName) {
             if (m_data.m_printUsage != nullptr) {
@@ -50,7 +50,7 @@ namespace CxxCli {
 
     };
 
-    namespace templates {
+    namespace details {
 
         template<typename sub_t>
         struct Command_t {
@@ -79,7 +79,7 @@ namespace CxxCli {
             ) const {
                 parseResult result = {
                     &m_sub,
-                    templates::invokePrintUsage0<sub_t>
+                    details::invokePrintUsage0<sub_t>
                 };
                 int i = 0;
                 if (m_sub.parse(&result, i, argc, argv) == ret::ok && i == argc) {
@@ -103,14 +103,14 @@ namespace CxxCli {
     *
     * A const will try compare an argument to the specified value, failing if comparison is not identical
     */
-    constexpr auto Const(const char * value) -> templates::const_::Const_t { return templates::const_::Const_t(value); }
+    constexpr auto Const(const char * value) -> details::const_::Const_t { return details::const_::Const_t(value); }
 
     /*
     * Creates a variable object
     *
     * A variable will map any argument given
     */
-    constexpr auto Var(const char * identifier = "") -> templates::var::Var_t { return templates::var::Var_t(identifier); }
+    constexpr auto Var(const char * identifier = "") -> details::var::Var_t { return details::var::Var_t(identifier); }
 
     /*
     * Creates a sequence object
@@ -118,8 +118,8 @@ namespace CxxCli {
     * A sequence will try to match the arguments with the specified subojects, failing if any is mismatched
     */
     template<typename ... subs_t>
-    constexpr auto Sequence(subs_t ... subs) -> templates::sequence::Sequence_t<void, false, subs_t...> {
-        return templates::sequence::Sequence_t<void, false, subs_t...>(Documentation_t<void>{}, std::tuple<subs_t...>{std::forward<subs_t>(subs)...});
+    constexpr auto Sequence(subs_t ... subs) -> details::sequence::Sequence_t<void, false, subs_t...> {
+        return details::sequence::Sequence_t<void, false, subs_t...>(Documentation_t<void>{}, std::tuple<subs_t...>{std::forward<subs_t>(subs)...});
     }
 
     /*
@@ -128,8 +128,8 @@ namespace CxxCli {
     * An option will try to match the arguments
     */
     template<typename sub_t>
-    constexpr auto Optional(sub_t sub) -> templates::optional::Optional_t<void, false, sub_t> {
-        return templates::optional::Optional_t<void, false, sub_t>(Documentation_t<void>{}, std::forward<sub_t>(sub));
+    constexpr auto Optional(sub_t sub) -> details::optional::Optional_t<sub_t> {
+        return details::optional::Optional_t<sub_t>(std::forward<sub_t>(sub));
     }
 
     /*
@@ -138,7 +138,7 @@ namespace CxxCli {
     * A loop will loop over the arguments until the next argument fails, returning a success
     */
     template<typename sub_t>
-    constexpr auto Loop(sub_t sub) -> templates::loop::Loop_t<sub_t> { return templates::loop::Loop_t<sub_t>(std::forward<sub_t>(sub)); }
+    constexpr auto Loop(sub_t sub) -> details::loop::Loop_t<sub_t> { return details::loop::Loop_t<sub_t>(std::forward<sub_t>(sub)); }
 
     /*
     * Creates a branch object with the specified subobjects
@@ -147,13 +147,13 @@ namespace CxxCli {
     * Stops immediately when a suboject successfully parses
     */
     template<typename ... subs_t>
-    constexpr auto Branch(subs_t ... subs) -> templates::branch::Branch_t<subs_t...> { return templates::branch::Branch_t<subs_t...>(std::forward<subs_t>(subs)...); }
+    constexpr auto Branch(subs_t ... subs) -> details::branch::Branch_t<subs_t...> { return details::branch::Branch_t<subs_t...>(std::forward<subs_t>(subs)...); }
 
     /*
     * Creates command object
     */
     template<typename sub_t>
-    constexpr auto Command(sub_t sub) -> templates::Command_t<sub_t> { return templates::Command_t<sub_t>(std::forward<sub_t>(sub)); }
+    constexpr auto Command(sub_t sub) -> details::Command_t<sub_t> { return details::Command_t<sub_t>(std::forward<sub_t>(sub)); }
 
 }
 
