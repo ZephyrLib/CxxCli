@@ -248,14 +248,15 @@ namespace CxxCli {
 
         namespace const_ {
 
+            template<typename value_t>
             struct Const_t {
                 static constexpr bool usageAsList = false;
                 static constexpr bool createsScope = false;
                 static constexpr int containedObjectCount = 0;
 
-                const char * m_value;
+                value_t m_value;
 
-                constexpr Const_t(const char * value) : m_value(value) {}
+                constexpr Const_t(value_t value) : m_value(std::move(value)) {}
 
                 template<typename fn_t = NullCallbackFn_t>
                 ret parse(parseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = NullCallbackFn_t()) const {

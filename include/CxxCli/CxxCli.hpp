@@ -103,7 +103,8 @@ namespace CxxCli {
     *
     * A const will try compare an argument to the specified value, failing if comparison is not identical
     */
-    constexpr auto Const(const char * value) -> details::const_::Const_t { return details::const_::Const_t(value); }
+    template<typename value_t>
+    constexpr auto Const(value_t value) -> details::const_::Const_t<value_t>{ return details::const_::Const_t<value_t>(std::move(value)); }
 
     /*
     * Creates a variable object
