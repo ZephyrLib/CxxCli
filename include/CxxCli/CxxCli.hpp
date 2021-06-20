@@ -110,7 +110,9 @@ namespace CxxCli {
     *
     * A variable will map any argument given
     */
-    constexpr auto Var(const char * identifier = "") -> details::var::Var_t { return details::var::Var_t(identifier); }
+    template<typename identifier_t>
+    constexpr auto Var(identifier_t identifier) -> details::var::Var_t<identifier_t> { return details::var::Var_t<identifier_t>(std::forward<identifier_t>(identifier)); }
+    constexpr auto Var() -> details::var::Var_t<void> { return details::var::Var_t<void>(); }
 
     /*
     * Creates a sequence object

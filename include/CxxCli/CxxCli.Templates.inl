@@ -44,7 +44,16 @@ namespace CxxCli {
 
     namespace details {
 
-        enum struct ret { ok = 1, mismatch, error };
+        enum struct ret {
+            // its ok
+            ok = 1,
+
+            // not ok but recoverable
+            mismatch,
+
+            // no
+            error
+        };
 
         struct parseResult {
             const void * m_object;
@@ -219,6 +228,7 @@ namespace CxxCli {
 
             fn_t m_fn;
             sub_t m_sub;
+
             constexpr Callback_t(fn_t fn, sub_t sub) : m_fn(std::move(fn)), m_sub(std::move(sub)) {}
 
             ret parse(parseResult * r, int & i, int argc, const char * const * argv) const {
@@ -226,11 +236,17 @@ namespace CxxCli {
             }
 
             void printUsage(std::ostream & out, int indent) const { m_sub.printUsage(out, indent); }
+
+            template<typename x, typename r = decltype(std::declval<sub_t>() & std::declval<x>())>
+            friend constexpr auto operator&(Callback_t c, x o) -> Callback_t<fn_t, r> {
+                return Callback_t<fn_t, r>(std::move(c.m_fn), (std::move(c.m_sub) & std::move(o)));
+            }
+
         };
 
         struct NullCallbackFn_t {
-            void operator()() const noexcept {}
-            template<typename x> void operator()(const x &) const noexcept {}
+            constexpr void operator()() const noexcept {}
+            template<typename x> constexpr void operator()(const x &) const noexcept {}
         };
 
     }
@@ -275,13 +291,32 @@ namespace CxxCli {
 
         namespace var {
 
-            struct Var_t {
+            template<bool isLegal, typename x>
+            struct dataContainer_t {
+                void printUsage(std::ostream & out, int) const { out << "<>"; }
+            };
+
+            template<typename x>
+            struct dataContainer_t<true, x> {
+                x m_data;
+                constexpr dataContainer_t(x data) : m_data(std::move(data)) {}
+                void printUsage(std::ostream & out, int) const { out << '<' << m_data << '>'; }
+            };
+
+            template<typename id_t>
+            using dataContainer = dataContainer_t<!std::is_empty<id_t>::value && !std::is_same<id_t, void>::value, id_t>;
+
+            template<typename id_t>
+            struct Var_t : dataContainer<id_t> {
                 static constexpr bool usageAsList = false;
                 static constexpr bool createsScope = false;
                 static constexpr int containedObjectCount = 0;
 
-                const char * m_identifier;
-                constexpr Var_t(const char * id) : m_identifier(id) {}
+                template<typename x = id_t, typename = typename std::enable_if<!std::is_same<x, void>::value>::type>
+                constexpr Var_t(x id) : dataContainer<id_t>(std::move(id)) {}
+
+                template<typename = typename std::enable_if<std::is_same<id_t, void>::value>::type>
+                constexpr Var_t() {}
 
                 template<typename fn_t = NullCallbackFn_t>
                 ret parse(parseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = NullCallbackFn_t{}) const {
@@ -297,7 +332,9 @@ namespace CxxCli {
                     return ret::ok;
                 }
 
-                void printUsage(std::ostream & out, int) const { out << '<' << m_identifier << '>'; }
+                /*void printUsage(std::ostream & out, int) const {
+                   // out << '<' << m_identifier << '>';
+                }*/
 
                 template<typename fn_t>
                 friend Callback_t<fn_t, Var_t> operator>>(Var_t v, fn_t fn) {
@@ -569,13 +606,19 @@ namespace CxxCli {
                 }
 
                 void printUsage(std::ostream & out, int indent) const {
-                    out << '{';
+                    if (usageAsList) {
+                        out << '{';
+                    } else {
+                        out << "{ ";
+                    }
                     printUsage_t<0, sizeof...(subs_t), usageAsList, void, subs_t...>::print(m_subs, Documentation_t<void>{}, out, indent + (usageAsList ? 1 : 0));
                     if (usageAsList) {
                         out << '\n';
                         printIndent(out, indent);
+                        out << '}';
+                    } else {
+                        out << " }";
                     }
-                    out << '}';
                 }
 
                 template<typename fn_t>
