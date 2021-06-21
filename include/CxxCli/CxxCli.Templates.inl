@@ -177,35 +177,6 @@ namespace CxxCli {
             static constexpr Documentation_t<void> getDoc() noexcept { return Documentation_t<void>{}; }
         };
 
-        template<typename fn_t, typename sub_t>
-        struct Callback_t {
-            static constexpr bool usageAsList = sub_t::usageAsList;
-            static constexpr bool createsScope = sub_t::createsScope;
-            static constexpr int containedObjectCount = sub_t::containedObjectCount;
-
-            fn_t m_fn;
-            sub_t m_sub;
-
-            constexpr Callback_t(fn_t fn, sub_t sub) : m_fn(std::move(fn)), m_sub(std::move(sub)) {}
-
-            ret parse(parseResult * r, int & i, int argc, const char * const * argv) const {
-                return m_sub.parse(r, i, argc, argv, m_fn);
-            }
-
-            void printUsage(std::ostream & out, int indent) const { m_sub.printUsage(out, indent); }
-
-            template<typename x, typename r = decltype(std::declval<sub_t>() & std::declval<x>())>
-            friend constexpr auto operator&(Callback_t c, x o) -> Callback_t<fn_t, r> {
-                return Callback_t<fn_t, r>(std::move(c.m_fn), (std::move(c.m_sub) & std::move(o)));
-            }
-
-        };
-
-        struct NullCallbackFn_t {
-            constexpr bool operator()() const noexcept { return true; }
-            template<typename x> constexpr bool operator()(const x &) const noexcept { return true; }
-        };
-
         template<typename fn_t, bool hasBoolRet, typename ... args_t>
         struct callbackInvoker_t;
         template<typename fn_t, typename ... args_t>
@@ -526,8 +497,7 @@ namespace CxxCli {
 
                 constexpr Loop_t(sub_t sub, cb_t cb) : cb_t(std::move(cb)), m_sub(std::move(sub)) {}
 
-                template<typename fn_t = NullCallbackFn_t>
-                ret parse(parseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = NullCallbackFn_t{}) const {
+                ret parse(parseResult * r, int & i, int argc, const char * const * argv) const {
                     while (true) {
                         auto j = i;
                         auto retVal = m_sub.parse(r, j, argc, argv);
