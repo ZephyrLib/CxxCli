@@ -10,9 +10,9 @@ Usage
 See tests
 
 CMake
-*****
+-----
 - Include ``./include`` path
-  - ``target_include_directories(<target> <PRIVATE | PUBLIC | ...> CxxCli/include)``
+    - ``target_include_directories(<target> <PRIVATE | PUBLIC | ...> CxxCli/include)``
 - ``#include "CxxCli/CxxCli.hpp"``
 
 Tested compilers
