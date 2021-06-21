@@ -104,7 +104,7 @@ namespace CxxCli {
     * A const will try compare an argument to the specified value, failing if comparison is not identical
     */
     template<typename value_t>
-    constexpr auto Const(value_t value) -> details::const_::Const_t<value_t>{ return details::const_::Const_t<value_t>(std::move(value)); }
+    constexpr auto Const(value_t value) -> details::const_::Const_t<value_t, details::const_::defaultCb_t> { return details::const_::Const_t<value_t, details::const_::defaultCb_t>(std::move(value), details::const_::defaultCb_t{}); }
 
     /*
     * Creates a variable object
@@ -112,8 +112,14 @@ namespace CxxCli {
     * A variable will map any argument given
     */
     template<typename identifier_t>
-    constexpr auto Var(identifier_t identifier) -> details::var::Var_t<identifier_t> { return details::var::Var_t<identifier_t>(std::forward<identifier_t>(identifier)); }
-    constexpr auto Var() -> details::var::Var_t<void> { return details::var::Var_t<void>(); }
+    constexpr auto Var(identifier_t identifier) -> details::var::Var_t<identifier_t, details::var::defaultCb_t> {
+        using namespace details::var;
+        return Var_t<identifier_t, defaultCb_t>(identifierContainer<identifier_t>(std::forward<identifier_t>(identifier)), defaultCb_t{});
+    }
+    constexpr auto Var() -> details::var::Var_t<void, details::var::defaultCb_t> {
+        using namespace details::var;
+        return Var_t<void, defaultCb_t>(identifierContainer<void>{}, defaultCb_t{});
+    }
 
     /*
     * Creates a sequence object
@@ -121,8 +127,9 @@ namespace CxxCli {
     * A sequence will try to match the arguments with the specified subojects, failing if any is mismatched
     */
     template<typename ... subs_t>
-    constexpr auto Sequence(subs_t ... subs) -> details::sequence::Sequence_t<void, false, subs_t...> {
-        return details::sequence::Sequence_t<void, false, subs_t...>(Documentation_t<void>{}, std::tuple<subs_t...>{std::forward<subs_t>(subs)...});
+    constexpr auto Sequence(subs_t ... subs) -> details::sequence::Sequence_t<void, details::sequence::defaultCb_t, false, subs_t...> {
+        using namespace details::sequence;
+        return Sequence_t<void, defaultCb_t, false, subs_t...>(Documentation_t<void>{}, defaultCb_t{}, std::tuple<subs_t...>{std::forward<subs_t>(subs)...});
     }
 
     /*
@@ -131,8 +138,9 @@ namespace CxxCli {
     * An option will try to match the arguments
     */
     template<typename sub_t>
-    constexpr auto Optional(sub_t sub) -> details::optional::Optional_t<sub_t> {
-        return details::optional::Optional_t<sub_t>(std::forward<sub_t>(sub));
+    constexpr auto Optional(sub_t sub) -> details::optional::Optional_t<sub_t, details::optional::defaultCb_t> {
+        using namespace details::optional;
+        return Optional_t<sub_t, defaultCb_t>(std::forward<sub_t>(sub), defaultCb_t{});
     }
 
     /*
@@ -141,7 +149,10 @@ namespace CxxCli {
     * A loop will loop over the arguments until the next argument fails, returning a success
     */
     template<typename sub_t>
-    constexpr auto Loop(sub_t sub) -> details::loop::Loop_t<sub_t> { return details::loop::Loop_t<sub_t>(std::forward<sub_t>(sub)); }
+    constexpr auto Loop(sub_t sub) -> details::loop::Loop_t<sub_t, details::loop::defaultCb_t> {
+        using namespace details::loop;
+        return Loop_t<sub_t, defaultCb_t>(std::forward<sub_t>(sub), defaultCb_t{});
+    }
 
     /*
     * Creates a branch object with the specified subobjects
@@ -150,7 +161,10 @@ namespace CxxCli {
     * Stops immediately when a suboject successfully parses
     */
     template<typename ... subs_t>
-    constexpr auto Branch(subs_t ... subs) -> details::branch::Branch_t<subs_t...> { return details::branch::Branch_t<subs_t...>(std::forward<subs_t>(subs)...); }
+    constexpr auto Branch(subs_t ... subs) -> details::branch::Branch_t<details::branch::defaultCb_t, subs_t...> {
+        using namespace details::branch;
+        return Branch_t<defaultCb_t, subs_t...>(defaultCb_t{}, std::tuple<subs_t...>{std::forward<subs_t>(subs)...});
+    }
 
     /*
     * Creates command object

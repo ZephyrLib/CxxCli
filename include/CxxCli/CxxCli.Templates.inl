@@ -63,24 +63,9 @@ namespace CxxCli {
         template<typename x>
         static void invokePrintUsage0(const void * v, std::ostream & out) { static_cast<const x *>(v)->printUsage(out, 0); }
 
-        /*template<typename, typename T>
+        template<typename, typename T>
         struct is_callable {
             static_assert(std::integral_constant<T, false>::value, "Second template parameter needs to be of function type.");
-        };
-
-        template<typename Ret, typename... Args>
-        struct is_callable_checkImpl {
-            template<typename T>
-            static constexpr auto check(T *) -> typename std::is_same<decltype(std::declval<T>()(std::declval<Args>()...)), Ret>::type;
-            template<typename>
-            static constexpr std::false_type check(...);
-        };
-        template<typename... Args>
-        struct is_callable_checkImpl<decltype(nullptr), Args...> {
-            template<typename T>
-            static constexpr auto check(T *) -> typename std::enable_if<true, decltype(std::declval<T>()(std::declval<Args>()...))>::type;
-            template<typename>
-            static constexpr std::false_type check(...);
         };
 
         template<typename C, typename Ret, typename... Args>
@@ -96,27 +81,6 @@ namespace CxxCli {
 
         template<typename T, typename Fn_t>
         static constexpr bool is_callable_v = is_callable<T, Fn_t>::value;
-
-        template<typename fn_t, typename externFn_t, typename sub_t>
-        struct CallbackImpl_t {
-            fn_t m_fn;
-            sub_t m_sub;
-            constexpr CallbackImpl_t(externFn_t fn, sub_t sub) : m_fn(std::move(fn)), m_sub(std::move(sub)) {}
-
-            ret parse(parseResult * r, int & i, int argc, const char * const * argv) const { return m_sub.parse(r, i, argc, argv, m_fn); }
-            void printUsage(std::ostream & out, int indent) const { m_sub.printUsage(out, indent); }
-        };
-        template<typename fn_t, typename sub_t>
-        struct CallbackImpl_t<fn_t, void, sub_t>;
-
-        template<typename fn_t, typename sub_t>
-        using Callback_t = CallbackImpl_t<
-            fn_t,
-            typename std::conditional<is_callable_v<fn_t, decltype(nullptr)()>, fn_t,
-                typename std::conditional<is_callable_v<fn_t, decltype(nullptr)(const char *)>, fn_t, void>::type
-            >::type,
-            sub_t
-        >;*/
 
         template<typename scalar_t>
         struct lambdaScalarParser {
@@ -238,9 +202,63 @@ namespace CxxCli {
         };
 
         struct NullCallbackFn_t {
-            constexpr void operator()() const noexcept {}
-            template<typename x> constexpr void operator()(const x &) const noexcept {}
+            constexpr bool operator()() const noexcept { return true; }
+            template<typename x> constexpr bool operator()(const x &) const noexcept { return true; }
         };
+
+        template<typename fn_t, bool hasBoolRet, typename ... args_t>
+        struct callbackInvoker_t;
+        template<typename fn_t, typename ... args_t>
+        struct callbackInvoker_t<fn_t, true, args_t...> { static constexpr bool invoke(const fn_t & fn, const args_t & ... args) { return fn(args...); } };
+        template<typename fn_t, typename ... args_t>
+        struct callbackInvoker_t<fn_t, false, args_t...> { static constexpr bool invoke(const fn_t & fn, const args_t & ... args) { fn(args...); return true; } };
+
+        template<typename extraCb_t, typename fn_t, bool hasBoolRet, typename ... args_t>
+        struct Callaback0_t : extraCb_t {
+            static constexpr bool validCallback = true;
+            fn_t m_fn;
+            constexpr Callaback0_t(extraCb_t efn, fn_t fn) : extraCb_t(std::move(efn)), m_fn(std::move(fn)) {}
+            constexpr bool callback(const args_t & ... args) const noexcept(noexcept(std::declval<const fn_t &>()(args...))) {
+                return extraCb_t::callback(args...) && callbackInvoker_t<fn_t, hasBoolRet, args_t...>::invoke(m_fn, args...);
+            }
+        };
+
+        template<typename fn_t, bool hasCorrectArgs, typename ... args_t>
+        struct getCallaback1_t {
+            template<typename extraCb_t>
+            using b = Callaback0_t<extraCb_t, fn_t, is_callable_v<fn_t, bool(args_t...)>, args_t...>;
+        };
+        template<typename fn_t, typename ... args_t>
+        struct getCallaback1_t<fn_t, false, args_t...> {
+            template<typename>
+            struct b {
+                static constexpr bool validCallback = false;
+            };
+        };
+
+        template<typename fn_t>
+        struct getCallaback0_t {
+            template<typename ... args_t>
+            using a = getCallaback1_t<fn_t, is_callable_v<fn_t, decltype(nullptr)(args_t...)>, args_t...>;
+        };
+        template<>
+        struct getCallaback0_t<void> {
+            template<typename ... args_t>
+            struct a {
+                template<typename>
+                struct b {
+                    constexpr static bool callback(const args_t & ...) noexcept { return true; }
+                };
+            };
+        };
+
+        template<typename extraCb_t, typename fn_t, typename ... args_t>
+        struct getCallaback_t {
+            using t = typename getCallaback0_t<fn_t>::template a<args_t...>::template b<extraCb_t>;
+        };
+
+        template<typename extraCb_t, typename fn_t, typename ... args_t>
+        using callback_t = typename getCallaback_t<extraCb_t, fn_t, args_t...>::t;
 
     }
 
@@ -248,18 +266,19 @@ namespace CxxCli {
 
         namespace const_ {
 
-            template<typename value_t>
-            struct Const_t {
+            using defaultCb_t = callback_t<void, void>;
+
+            template<typename value_t, typename cb_t>
+            struct Const_t : cb_t {
                 static constexpr bool usageAsList = false;
                 static constexpr bool createsScope = false;
                 static constexpr int containedObjectCount = 0;
 
                 value_t m_value;
 
-                constexpr Const_t(value_t value) : m_value(std::move(value)) {}
+                constexpr Const_t(value_t value, cb_t fn) : cb_t(std::move(fn)), m_value(std::move(value)) {}
 
-                template<typename fn_t = NullCallbackFn_t>
-                ret parse(parseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = NullCallbackFn_t()) const {
+                ret parse(parseResult * r, int & i, int argc, const char * const * argv) const {
                     if (i >= argc) {
                         //r->errorMessage = "index out of bounds";
                         //r->usageMessage = "";
@@ -268,16 +287,16 @@ namespace CxxCli {
                         return ret::mismatch;
                     }
                     if (std::strcmp(m_value, argv[i]) != 0) { return ret::mismatch; }
-                    cb();
+                    if (!cb_t::callback()) { return ret::mismatch; }
                     ++i;
                     return ret::ok;
                 }
 
                 void printUsage(std::ostream & out, int) const { out << m_value; }
 
-                template<typename fn_t>
-                constexpr friend Callback_t<fn_t, Const_t> operator>>(Const_t c, fn_t fn) {
-                    return Callback_t<fn_t, Const_t>(std::move(fn), std::move(c));
+                template<typename fn_t, typename ncb_t = callback_t<cb_t, fn_t>, typename r = typename std::enable_if<ncb_t::validCallback, Const_t<value_t, ncb_t>>::type>
+                constexpr friend auto operator>>(Const_t c, fn_t fn) -> r {
+                    return r(std::move(c.m_value), ncb_t(std::move(static_cast<cb_t &>(c)), std::move(fn)));
                 }
 
             };
@@ -287,34 +306,30 @@ namespace CxxCli {
         namespace var {
 
             template<bool isLegal, typename x>
-            struct dataContainer_t {
+            struct identifierContainer_t {
                 void printUsage(std::ostream & out, int) const { out << "<>"; }
             };
-
             template<typename x>
-            struct dataContainer_t<true, x> {
-                x m_data;
-                constexpr dataContainer_t(x data) : m_data(std::move(data)) {}
-                void printUsage(std::ostream & out, int) const { out << '<' << m_data << '>'; }
+            struct identifierContainer_t<true, x> {
+                x m_identifier;
+                constexpr identifierContainer_t(x data) : m_identifier(std::move(data)) {}
+                void printUsage(std::ostream & out, int) const { out << '<' << m_identifier << '>'; }
             };
 
             template<typename id_t>
-            using dataContainer = dataContainer_t<!std::is_empty<id_t>::value && !std::is_same<id_t, void>::value, id_t>;
+            using identifierContainer = identifierContainer_t<!std::is_empty<id_t>::value && !std::is_same<id_t, void>::value, id_t>;
 
-            template<typename id_t>
-            struct Var_t : dataContainer<id_t> {
+            using defaultCb_t = callback_t<void, void, const char *>;
+
+            template<typename id_t, typename cb_t>
+            struct Var_t : identifierContainer<id_t>, cb_t {
                 static constexpr bool usageAsList = false;
                 static constexpr bool createsScope = false;
                 static constexpr int containedObjectCount = 0;
 
-                template<typename x = id_t, typename = typename std::enable_if<!std::is_same<x, void>::value>::type>
-                constexpr Var_t(x id) : dataContainer<id_t>(std::move(id)) {}
+                constexpr Var_t(identifierContainer<id_t> idc, cb_t fn) : identifierContainer<id_t>(std::move(idc)), cb_t(std::move(fn)) {}
 
-                template<typename = typename std::enable_if<std::is_same<id_t, void>::value>::type>
-                constexpr Var_t() {}
-
-                template<typename fn_t = NullCallbackFn_t>
-                ret parse(parseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = NullCallbackFn_t{}) const {
+                ret parse(parseResult * r, int & i, int argc, const char * const * argv) const {
                     if (i >= argc) {
                         //r->errorMessage = "index out of bounds";
                         //r->usageMessage = "";
@@ -322,29 +337,33 @@ namespace CxxCli {
                         r->m_printUsage = invokePrintUsage0<Var_t>;
                         return ret::mismatch;
                     }
-                    cb(argv[i]);
+                    if (!cb_t::callback(argv[i])) { return ret::mismatch; }
                     ++i;
                     return ret::ok;
                 }
 
-                template<typename fn_t>
-                constexpr friend Callback_t<fn_t, Var_t> operator>>(Var_t v, fn_t fn) {
-                    return Callback_t<fn_t, Var_t>(std::move(fn), std::move(v));
+                template<typename fn_t, typename ncb_t = callback_t<cb_t, fn_t, const char *>, typename r = typename std::enable_if<ncb_t::validCallback, Var_t<id_t, ncb_t>>::type>
+                constexpr friend auto operator>>(Var_t v, fn_t fn) -> r {
+                    return r(std::move(static_cast<identifierContainer<id_t> &>(v)), ncb_t(std::move(static_cast<cb_t &>(v)), std::move(fn)));
                 }
 
-                template<typename scalar_t>
-                constexpr friend typename std::enable_if<std::is_scalar<scalar_t>::value, Callback_t<lambdaScalarParser<scalar_t>, Var_t>>::type
-                    operator>>(Var_t v, scalar_t * target) {
-                    return Callback_t<lambdaScalarParser<scalar_t>, Var_t>(lambdaScalarParser<scalar_t>{target}, std::move(v));
+                template<typename scalar_t, typename ncb_t = callback_t<cb_t, lambdaScalarParser<scalar_t>, const char *>, typename r = typename std::enable_if<std::is_scalar<scalar_t>::value, Var_t<id_t, ncb_t>>::type>
+                constexpr friend auto operator>>(Var_t v, scalar_t * target) -> r {
+                    return r(std::move(static_cast<identifierContainer<id_t> &>(v)), ncb_t(std::move(static_cast<cb_t &>(v)), lambdaScalarParser<scalar_t>{target}));
                 }
 
-                constexpr friend Callback_t<lambdaStringParser<const char *>, Var_t> operator>>(Var_t v, const char ** target) {
-                    return Callback_t<lambdaStringParser<const char *>, Var_t>(lambdaStringParser<const char *>{target}, std::move(v));
+                constexpr friend auto operator>>(Var_t v, const char ** target) -> Var_t<id_t, callback_t<cb_t, lambdaStringParser<const char *>, const char *>> {
+                    using ncb_t = callback_t<cb_t, lambdaStringParser<const char *>, const char *>;
+                    using r = Var_t<id_t, ncb_t>;
+                    return r(std::move(static_cast<identifierContainer<id_t> &>(v)), ncb_t(std::move(static_cast<cb_t &>(v)), lambdaStringParser<const char *>{target}));
                 }
 
                 template<typename char_t, typename traits_t, typename allocator_t>
-                constexpr friend Callback_t<lambdaStringParser<std::basic_string<char_t, traits_t, allocator_t>>, Var_t> operator>>(Var_t v, std::basic_string<char_t, traits_t, allocator_t> * target) {
-                    return Callback_t<lambdaStringParser<std::basic_string<char_t, traits_t, allocator_t>>, Var_t>(lambdaStringParser<std::basic_string<char_t, traits_t, allocator_t>>{target}, std::move(v));
+                constexpr friend auto operator>>(Var_t v, std::basic_string<char_t, traits_t, allocator_t> * target) -> Var_t<id_t, callback_t<cb_t, lambdaStringParser<std::basic_string<char_t, traits_t, allocator_t>>, const char *>> {
+                    using sp = lambdaStringParser<std::basic_string<char_t, traits_t, allocator_t>>;
+                    using ncb_t = callback_t<cb_t, sp, const char *>;
+                    using r = Var_t<id_t, ncb_t>;
+                    return r(std::move(static_cast<identifierContainer<id_t> &>(v)), ncb_t(std::move(static_cast<cb_t &>(v)), sp{target}));
                 }
 
             };
@@ -399,23 +418,25 @@ namespace CxxCli {
                 static void print(const std::tuple<subs_t...> &, Documentation_t<void>, std::ostream &, int) {}
             };
 
-            template<typename doc_t, bool usageAsList0, typename ... subs_t>
-            struct Sequence_t : Documentable_t<doc_t> {
+            using defaultCb_t = callback_t<void, void>;
+
+            template<typename doc_t, typename cb_t, bool usageAsList0, typename ... subs_t>
+            struct Sequence_t : Documentable_t<doc_t>, cb_t {
                 static constexpr bool usageAsList = usageAsList0 || or_parameters(subs_t::usageAsList...);
                 static constexpr bool createsScope = false;
                 static constexpr int containedObjectCount = sizeof...(subs_t);
 
                 std::tuple<subs_t...> m_subs;
 
-                constexpr Sequence_t(Documentation_t<doc_t> doc, decltype(m_subs) subs) : Documentable_t<doc_t>(std::move(doc)), m_subs(std::move(subs)) {}
+                constexpr Sequence_t(Documentation_t<doc_t> doc, cb_t cb, decltype(m_subs) subs) : Documentable_t<doc_t>(std::move(doc)), cb_t(std::move(cb)), m_subs(std::move(subs)) {}
 
-                template<typename fn_t = NullCallbackFn_t>
-                ret parse(parseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = NullCallbackFn_t{}) const {
+                ret parse(parseResult * r, int & i, int argc, const char * const * argv) const {
                     auto j = i;
                     auto retVal = parse_t<0, sizeof...(subs_t), subs_t...>::parse(m_subs, r, j, argc, argv);
                     if (retVal == ret::ok) {
-                        i = j;
-                        cb();
+                        if (cb_t::callback()) {
+                            i = j;
+                        }
                     }
                     return retVal;
                 }
@@ -423,21 +444,20 @@ namespace CxxCli {
                 void printUsage(std::ostream & out, int indent) const { printUsage_t<0, sizeof...(subs_t), usageAsList, doc_t, subs_t...>::print(m_subs, Documentable_t<doc_t>::getDoc(), out, indent); }
 
                 // attach lambda
-                template<typename fn_t>
-                constexpr friend Callback_t<fn_t, Sequence_t> operator>>(Sequence_t c, fn_t fn) {
-                    return Callback_t<fn_t, Sequence_t>(std::move(fn), std::move(c));
+                template<typename fn_t, typename ncb_t = callback_t<cb_t, fn_t>, typename r = typename std::enable_if<ncb_t::validCallback, Sequence_t<doc_t, ncb_t, usageAsList, subs_t...>>::type>
+                constexpr friend auto operator>>(Sequence_t s, fn_t fn) -> r {
+                    return r(std::move(s.getDoc()), ncb_t(std::move(static_cast<cb_t &>(s)), std::move(fn)), std::move(s.m_subs));
                 }
 
                 // set print as list
-                template<typename x = typename std::enable_if<true, Sequence_t<doc_t, true, subs_t...>>::type>
-                constexpr friend x operator&(Sequence_t c, UsageAsList_t) {
-                    return x(std::move(c.getDoc()), std::move(c.m_subs));
+                constexpr friend auto operator&(Sequence_t s, UsageAsList_t) -> Sequence_t<doc_t, cb_t, true, subs_t...> {
+                    return Sequence_t<doc_t, cb_t, true, subs_t...>(std::move(s.getDoc()), std::move(static_cast<cb_t &>(s)), std::move(s.m_subs));
                 }
 
                 // set doc
                 template<typename newDoc_t>
-                constexpr friend Sequence_t<newDoc_t, usageAsList, subs_t...> operator&(Sequence_t c, Documentation_t<newDoc_t> doc) {
-                    return Sequence_t<newDoc_t, usageAsList, subs_t...>(std::move(doc), std::move(c.m_subs));
+                constexpr friend auto operator&(Sequence_t s, Documentation_t<newDoc_t> doc) -> Sequence_t<newDoc_t, cb_t, usageAsList, subs_t...> {
+                    return Sequence_t<newDoc_t, cb_t, usageAsList, subs_t...>(std::move(doc), std::move(static_cast<cb_t &>(s)), std::move(s.m_subs));
                 }
 
             };
@@ -446,23 +466,25 @@ namespace CxxCli {
 
         namespace optional {
 
-            template<typename sub_t>
-            struct Optional_t {
+            using defaultCb_t = callback_t<void, void>;
+
+            template<typename sub_t, typename cb_t>
+            struct Optional_t : cb_t {
                 static constexpr bool usageAsList = sub_t::usageAsList;
                 static constexpr bool createsScope = true;
                 static constexpr int containedObjectCount = 1;
 
                 sub_t m_sub;
 
-                constexpr Optional_t(sub_t sub) : m_sub(std::move(sub)) {}
+                constexpr Optional_t(sub_t sub, cb_t cb) : cb_t(std::move(cb)), m_sub(std::move(sub)) {}
 
-                template<typename fn_t = NullCallbackFn_t>
-                ret parse(parseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = NullCallbackFn_t{}) const {
+                ret parse(parseResult * r, int & i, int argc, const char * const * argv) const {
                     auto j = i;
                     auto retVal = m_sub.parse(r, j, argc, argv);
                     if (retVal == ret::ok) {
-                        i = j;
-                        cb();
+                        if (cb_t::callback()) {
+                            i = j;
+                        }
                     }
                     return ret::ok;
                 }
@@ -481,9 +503,9 @@ namespace CxxCli {
                     out << ']';
                 }
 
-                template<typename fn_t>
-                constexpr friend Callback_t<fn_t, Optional_t> operator>>(Optional_t c, fn_t fn) {
-                    return Callback_t<fn_t, Optional_t>(std::move(fn), std::move(c));
+                template<typename fn_t, typename ncb_t = callback_t<cb_t, fn_t>, typename r = typename std::enable_if<ncb_t::validCallback, Optional_t<sub_t, ncb_t>>::type>
+                constexpr friend auto operator>>(Optional_t o, fn_t fn) -> r {
+                    return r(std::move(o.m_sub), ncb_t(std::move(static_cast<cb_t &>(o)), std::move(fn)));
                 }
 
             };
@@ -492,15 +514,17 @@ namespace CxxCli {
 
         namespace loop {
 
-            template<typename sub_t>
-            struct Loop_t {
+            using defaultCb_t = callback_t<void, void>;
+
+            template<typename sub_t, typename cb_t>
+            struct Loop_t : cb_t {
                 static constexpr bool usageAsList = sub_t::usageAsList;
                 static constexpr bool createsScope = true;
                 static constexpr int containedObjectCount = 1;
 
                 sub_t m_sub;
 
-                constexpr Loop_t(sub_t sub) : m_sub(std::move(sub)) {}
+                constexpr Loop_t(sub_t sub, cb_t cb) : cb_t(std::move(cb)), m_sub(std::move(sub)) {}
 
                 template<typename fn_t = NullCallbackFn_t>
                 ret parse(parseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = NullCallbackFn_t{}) const {
@@ -508,8 +532,8 @@ namespace CxxCli {
                         auto j = i;
                         auto retVal = m_sub.parse(r, j, argc, argv);
                         if (retVal != ret::ok || i == j) { return ret::ok; }
+                        if (!cb_t::callback()) { return ret::ok; }
                         i = j;
-                        cb();
                     }
                 }
 
@@ -527,9 +551,9 @@ namespace CxxCli {
                     out << "]...";
                 }
 
-                template<typename fn_t>
-                constexpr friend Callback_t<fn_t, Loop_t> operator>>(Loop_t c, fn_t fn) {
-                    return Callback_t<fn_t, Loop_t>(std::move(fn), std::move(c));
+                template<typename fn_t, typename ncb_t = callback_t<cb_t, fn_t>, typename r = typename std::enable_if<ncb_t::validCallback, Loop_t<sub_t, ncb_t>>::type>
+                constexpr friend auto operator>>(Loop_t l, fn_t fn) -> r {
+                    return r(std::move(l.m_sub), ncb_t(std::move(static_cast<cb_t &>(l)), std::move(fn)));
                 }
 
             };
@@ -538,7 +562,7 @@ namespace CxxCli {
 
         namespace branch {
 
-            template<int I, int L, typename ... subs_t>
+            template<int I, int L, typename branch_t>
             struct parse_t;
 
             template<int I, int L, bool usageAsList, typename doc_t, typename ... subs_t>
@@ -578,23 +602,25 @@ namespace CxxCli {
                 static void print(const std::tuple<subs_t...> &, Documentation_t<void>, std::ostream &, int) {}
             };
 
-            template<typename ... subs_t>
-            struct Branch_t {
+            using defaultCb_t = callback_t<void, void>;
+
+            template<typename cb_t, typename ... subs_t>
+            struct Branch_t : cb_t {
                 static constexpr bool usageAsList = or_parameters(subs_t::usageAsList...);
                 static constexpr bool createsScope = true;
                 static constexpr int containedObjectCount = sizeof...(subs_t);
 
                 std::tuple<subs_t...> m_subs;
 
-                constexpr Branch_t(subs_t ... subs) : m_subs(std::forward<subs_t>(subs)...) {}
+                constexpr Branch_t(cb_t cb, decltype(m_subs) subs) : cb_t(std::move(cb)), m_subs(std::move(subs)) {}
 
-                template<typename fn_t = NullCallbackFn_t>
-                ret parse(parseResult * r, int & i, int argc, const char * const * argv, const fn_t & cb = NullCallbackFn_t{}) const {
+                ret parse(parseResult * r, int & i, int argc, const char * const * argv) const {
                     auto j = i;
-                    auto retVal = parse_t<0, sizeof...(subs_t), subs_t...>::parse(*this, r, j, argc, argv);
+                    auto retVal = parse_t<0, sizeof...(subs_t), Branch_t>::parse(*this, r, j, argc, argv);
                     if (retVal == ret::ok) {
-                        i = j;
-                        cb();
+                        if (cb_t::callback()) {
+                            i = j;
+                        }
                     }
                     return retVal;
                 }
@@ -615,26 +641,26 @@ namespace CxxCli {
                     }
                 }
 
-                template<typename fn_t>
-                constexpr friend Callback_t<fn_t, Branch_t> operator>>(Branch_t c, fn_t fn) {
-                    return Callback_t<fn_t, Branch_t>(std::move(fn), std::move(c));
+                template<typename fn_t, typename ncb_t = callback_t<cb_t, fn_t>, typename r = typename std::enable_if<ncb_t::validCallback, Branch_t<ncb_t, subs_t...>>::type>
+                constexpr friend auto operator>>(Branch_t b, fn_t fn) -> r {
+                    return r(ncb_t(std::move(static_cast<cb_t &>(b)), std::move(fn)), std::move(b.m_subs));
                 }
 
             };
 
-            template<int I, int L, typename ... subs_t>
+            template<int I, int L, typename branch_t>
             struct parse_t {
-                static ret parse(const Branch_t<subs_t...> & b, parseResult * r, int & i, int argc, const char * const * argv) {
+                static ret parse(const branch_t & b, parseResult * r, int & i, int argc, const char * const * argv) {
                     auto retVal = std::get<I>(b.m_subs).parse(r, i, argc, argv);
-                    if (retVal == ret::mismatch) { return parse_t<I + 1, L, subs_t...>::parse(b, r, i, argc, argv); }
+                    if (retVal == ret::mismatch) { return parse_t<I + 1, L, branch_t>::parse(b, r, i, argc, argv); }
                     return retVal;
                 }
             };
-            template<int L, typename ... subs_t>
-            struct parse_t<L, L, subs_t...> {
-                static ret parse(const Branch_t<subs_t...> & b, parseResult * r, int &, int, const char * const *) {
+            template<int L, typename branch_t>
+            struct parse_t<L, L, typename branch_t> {
+                static ret parse(const branch_t & b, parseResult * r, int &, int, const char * const *) {
                     r->m_object = &b;
-                    r->m_printUsage = invokePrintUsage0<Branch_t<subs_t...>>;
+                    r->m_printUsage = invokePrintUsage0<branch_t>;
                     return ret::error;
                 }
             };

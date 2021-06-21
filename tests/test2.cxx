@@ -1,5 +1,6 @@
 
 #include <cassert>
+#include <string>
 
 #include <CxxCli/CxxCli.hpp>
 
@@ -13,7 +14,7 @@ static int test() {
     const char * identifier = nullptr;
     const char * target = nullptr;
     const char * src_name = nullptr;
-    const char * header_name = nullptr;
+    std::string header_name;
     const char * output_dir = nullptr;
 
     auto cmd = Command(
