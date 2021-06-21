@@ -67,9 +67,6 @@ namespace CxxCli {
             static constexpr bool value = std::conditional<std::is_same<Ret, decltype(nullptr)>::value, typename std::conditional<std::is_same<ret_t, err_t>::value, std::false_type, std::true_type>::type, std::is_same<ret_t, Ret>>::type::value;
         };
 
-        template<typename T, typename Fn_t>
-        static constexpr bool is_callable_v = is_callable<T, Fn_t>::value;
-
     }
 
     // has_container_methods
@@ -93,11 +90,6 @@ namespace CxxCli {
 
         };
 
-        template<typename c, typename a>
-        static constexpr bool has_emplace_back_v = has_container_methods<c, a>::has_emplace_back;
-        template<typename c, typename a>
-        static constexpr bool has_push_back_v = has_container_methods<c, a>::has_push_back;
-
         // if that container can be appended to, somehow
         template<typename container_t, typename arg_t, bool has_emplace_back, bool has_push_back>
         struct has_add_functionality0 {
@@ -115,9 +107,7 @@ namespace CxxCli {
         };
 
         template<typename container_t, typename arg_t>
-        struct has_add_functionality : has_add_functionality0<container_t, arg_t, has_emplace_back_v<container_t, arg_t>, has_push_back_v<container_t, arg_t>> {};
-        template<typename container_t, typename arg_t>
-        static constexpr bool has_add_functionality_v = has_add_functionality<container_t, arg_t>::value;
+        struct has_add_functionality : has_add_functionality0<container_t, arg_t, has_container_methods<container_t, arg_t>::has_emplace_back, has_container_methods<container_t, arg_t>::has_push_back> {};
 
     }
 
@@ -261,7 +251,7 @@ namespace CxxCli {
         template<typename fn_t, typename ... args_t>
         struct callbackInvoker_t<fn_t, true, args_t...> { static constexpr bool invoke(const fn_t & fn, const args_t & ... args) { return fn(args...); } };
         template<typename fn_t, typename ... args_t>
-        struct callbackInvoker_t<fn_t, false, args_t...> { static constexpr bool invoke(const fn_t & fn, const args_t & ... args) { fn(args...); return true; } };
+        struct callbackInvoker_t<fn_t, false, args_t...> { static bool invoke(const fn_t & fn, const args_t & ... args) { fn(args...); return true; } };
 
         template<typename extraCb_t, typename fn_t, bool hasBoolRet, typename ... args_t>
         struct Callaback0_t : extraCb_t {
@@ -276,7 +266,7 @@ namespace CxxCli {
         template<typename fn_t, bool hasCorrectArgs, typename ... args_t>
         struct getCallaback1_t {
             template<typename extraCb_t>
-            using b = Callaback0_t<extraCb_t, fn_t, is_callable_v<fn_t, bool(args_t...)>, args_t...>;
+            using b = Callaback0_t<extraCb_t, fn_t, is_callable<fn_t, bool(args_t...)>::value, args_t...>;
         };
         template<typename fn_t, typename ... args_t>
         struct getCallaback1_t<fn_t, false, args_t...> {
@@ -289,7 +279,7 @@ namespace CxxCli {
         template<typename fn_t>
         struct getCallaback0_t {
             template<typename ... args_t>
-            using a = getCallaback1_t<fn_t, is_callable_v<fn_t, decltype(nullptr)(args_t...)>, args_t...>;
+            using a = getCallaback1_t<fn_t, is_callable<fn_t, decltype(nullptr)(args_t...)>::value, args_t...>;
         };
         template<>
         struct getCallaback0_t<void> {
@@ -413,7 +403,7 @@ namespace CxxCli {
 
                 // add string
                 template<typename container_t, typename vt = typename container_t::value_type, typename ncb_t = callback_t<cb_t, lambdaStringAdder<container_t>, const char *>>
-                constexpr friend auto operator>>(Var_t v, container_t * target) -> typename std::enable_if<has_add_functionality_v<container_t, const char *>, Var_t<id_t, ncb_t>>::type {
+                constexpr friend auto operator>>(Var_t v, container_t * target) -> typename std::enable_if<has_add_functionality<container_t, const char *>::value, Var_t<id_t, ncb_t>>::type {
                     return Var_t<id_t, ncb_t>(std::move(static_cast<identifierContainer<id_t> &>(v)), ncb_t(std::move(static_cast<cb_t &>(v)), lambdaStringAdder<container_t>{target}));
                 }
 
@@ -713,7 +703,7 @@ namespace CxxCli {
                 }
             };
             template<int L, typename branch_t>
-            struct parse_t<L, L, typename branch_t> {
+            struct parse_t<L, L, branch_t> {
                 static ret parse(const branch_t & b, parseResult * r, int &, int, const char * const *) {
                     r->m_object = &b;
                     r->m_printUsage = invokePrintUsage0<branch_t>;

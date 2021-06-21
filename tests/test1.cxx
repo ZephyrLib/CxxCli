@@ -58,13 +58,13 @@ static int test() {
 
     auto result = cmd.parse(argc, argv);
 
-    static_assert(!details::has_emplace_back_v<int, int>, "failing template");
-    static_assert(details::has_emplace_back_v<std::vector<int>, int>, "failing template");
-    static_assert(details::has_emplace_back_v<std::vector<std::string>, const char *>, "failing template");
+    static_assert(!details::has_container_methods<int, int>::has_emplace_back, "failing template");
+    static_assert(details::has_container_methods<std::vector<int>, int>::has_emplace_back, "failing template");
+    static_assert(details::has_container_methods<std::vector<std::string>, const char *>::has_emplace_back, "failing template");
 
-    static_assert(!details::has_push_back_v<int, int>, "failing template");
-    static_assert(details::has_push_back_v<std::vector<int>, int>, "failing template");
-    static_assert(details::has_push_back_v<std::vector<std::string>, const char *>, "failing template");
+    static_assert(!details::has_container_methods<int, int>::has_push_back, "failing template");
+    static_assert(details::has_container_methods<std::vector<int>, int>::has_push_back, "failing template");
+    static_assert(details::has_container_methods<std::vector<std::string>, const char *>::has_push_back, "failing template");
 
     assert(result);
 
