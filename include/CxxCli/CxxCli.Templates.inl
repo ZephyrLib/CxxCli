@@ -12,6 +12,7 @@
 
 namespace CxxCli {
 
+    // static_string
     namespace details {
 
         template<typename char_t, char_t... values>
@@ -35,10 +36,88 @@ namespace CxxCli {
         using indent_t = typename generate_param_pack_t<char_t, (CXXCLI_INDENT_CHAR_VALUE), (CXXCLI_INDENT_LENGTH)>::result;
         using indent_char_t = indent_t<char>;
 
+    }
+
+    // or_parameters
+    namespace details {
+
         template<typename x>
         static constexpr bool or_parameters(x a) { return a; }
         template<typename x, typename... args_t>
         static constexpr bool or_parameters(x a, args_t... args) { return a || or_parameters(args...); }
+
+    }
+
+    // is_callable
+    namespace details {
+
+        template<typename, typename T>
+        struct is_callable {
+            static_assert(std::integral_constant<T, false>::value, "Second template parameter needs to be of function type.");
+        };
+
+        template<typename C, typename Ret, typename... Args>
+        struct is_callable<C, Ret(Args...)> {
+            struct err_t {};
+            template<typename T>
+            static constexpr auto check(T *) -> decltype(std::declval<T>()(std::declval<Args>()...));
+            template<typename>
+            static constexpr err_t check(...);
+            using ret_t = decltype(check<C>(0));
+            static constexpr bool value = std::conditional<std::is_same<Ret, decltype(nullptr)>::value, typename std::conditional<std::is_same<ret_t, err_t>::value, std::false_type, std::true_type>::type, std::is_same<ret_t, Ret>>::type::value;
+        };
+
+        template<typename T, typename Fn_t>
+        static constexpr bool is_callable_v = is_callable<T, Fn_t>::value;
+
+    }
+
+    // has_container_methods
+    namespace details {
+
+        template<typename container_t, typename element_t>
+        struct has_container_methods {
+        private:
+            struct err_t {};
+
+            template<typename t, typename a> static constexpr auto check_emplace_back(t *) -> decltype(std::declval<t &>().emplace_back(std::declval<a>()));
+            template<typename, typename> static constexpr err_t check_emplace_back(...);
+
+            template<typename t, typename a> static constexpr auto check_push_back(t *) -> decltype(std::declval<t &>().push_back(std::declval<a>()));
+            template<typename, typename> static constexpr err_t check_push_back(...);
+
+        public:
+
+            static constexpr bool has_emplace_back = !std::is_same<decltype(check_emplace_back<container_t, element_t>(0)), err_t>::value;
+            static constexpr bool has_push_back = !std::is_same<decltype(check_push_back<container_t, element_t>(0)), err_t>::value;
+
+        };
+
+        template<typename c, typename a>
+        static constexpr bool has_emplace_back_v = has_container_methods<c, a>::has_emplace_back;
+        template<typename c, typename a>
+        static constexpr bool has_push_back_v = has_container_methods<c, a>::has_push_back;
+
+        // if that container can be appended to, somehow
+        template<typename container_t, typename arg_t, bool has_emplace_back, bool has_push_back>
+        struct has_add_functionality0 {
+            static constexpr bool value = false;
+        };
+        template<typename container_t, typename arg_t, bool has_push_back>
+        struct has_add_functionality0<container_t, arg_t, true, has_push_back> { // prefer emplace_back
+            static constexpr bool value = true;
+            static void add(container_t & c, arg_t arg) { c.emplace_back(std::forward<arg_t>(arg)); }
+        };
+        template<typename container_t, typename arg_t>
+        struct has_add_functionality0<container_t, arg_t, false, true> { // fallback to push_back
+            static constexpr bool value = true;
+            static void add(container_t & c, arg_t arg) { c.push_back(std::forward<arg_t>(arg)); }
+        };
+
+        template<typename container_t, typename arg_t>
+        struct has_add_functionality : has_add_functionality0<container_t, arg_t, has_emplace_back_v<container_t, arg_t>, has_push_back_v<container_t, arg_t>> {};
+        template<typename container_t, typename arg_t>
+        static constexpr bool has_add_functionality_v = has_add_functionality<container_t, arg_t>::value;
 
     }
 
@@ -63,28 +142,9 @@ namespace CxxCli {
         template<typename x>
         static void invokePrintUsage0(const void * v, std::ostream & out) { static_cast<const x *>(v)->printUsage(out, 0); }
 
-        template<typename, typename T>
-        struct is_callable {
-            static_assert(std::integral_constant<T, false>::value, "Second template parameter needs to be of function type.");
-        };
-
-        template<typename C, typename Ret, typename... Args>
-        struct is_callable<C, Ret(Args...)> {
-            struct err_t {};
-            template<typename T>
-            static constexpr auto check(T *) -> decltype(std::declval<T>()(std::declval<Args>()...));
-            template<typename>
-            static constexpr err_t check(...);
-            using ret_t = decltype(check<C>(0));
-            static constexpr bool value = std::conditional<std::is_same<Ret, decltype(nullptr)>::value, typename std::conditional<std::is_same<ret_t, err_t>::value, std::false_type, std::true_type>::type, std::is_same<ret_t, Ret>>::type::value;
-        };
-
-        template<typename T, typename Fn_t>
-        static constexpr bool is_callable_v = is_callable<T, Fn_t>::value;
-
-        template<typename scalar_t>
-        struct lambdaScalarParser {
-            scalar_t * m_target;
+        template<typename arithemtic_t>
+        struct lambdaArithmeticSetter {
+            arithemtic_t * m_target;
 
             bool operator()(const char * value) const {
                 char * str_end;
@@ -94,27 +154,46 @@ namespace CxxCli {
                 return true;
             }
 
-            template<typename x = scalar_t>
+            template<typename x = arithemtic_t>
             static auto parse(char const * value, char ** end_ptr) -> typename std::enable_if<std::is_floating_point<x>::value, x>::type {
                 return static_cast<x>(std::strtold(value, end_ptr));
             }
 
-            template<typename x = scalar_t>
+            template<typename x = arithemtic_t>
             static auto parse(char const * value, char ** end_ptr) -> typename std::enable_if<std::is_integral<x>::value && std::is_signed<x>::value, x>::type {
                 return static_cast<x>(std::strtoll(value, end_ptr, 10));
             }
 
-            template<typename x = scalar_t>
+            template<typename x = arithemtic_t>
             static auto parse(char const * value, char ** end_ptr) -> typename std::enable_if<std::is_integral<x>::value && std::is_unsigned<x>::value, x>::type {
                 return static_cast<x>(std::strtoull(value, end_ptr, 10));
             }
 
         };
 
+        template<typename arithemticContainer_t, typename element_t>
+        struct lambdaArithmeticAdder {
+            arithemticContainer_t * m_container;
+
+            bool operator()(const char * value) const {
+                char * str_end;
+                auto v = lambdaArithmeticSetter<element_t>::parse(value, &str_end);
+                if ((str_end - value) != std::strlen(value)) { return false; }
+                has_add_functionality<arithemticContainer_t, element_t>::add(m_container, v);
+                return true;
+            }
+        };
+
         template<typename string_t>
-        struct lambdaStringParser {
+        struct lambdaStringSetter {
             string_t * m_target;
             bool operator()(const char * value) const { *m_target = value; return true; }
+        };
+
+        template<typename stringContainer_t>
+        struct lambdaStringAdder {
+            stringContainer_t * m_target;
+            bool operator()(const char * value) const { m_target->emplace_back(value); return true; }
         };
 
         static void printIndent(std::ostream & out, int indent) {
@@ -233,6 +312,7 @@ namespace CxxCli {
 
     }
 
+    // implementation
     namespace details {
 
         namespace const_ {
@@ -313,28 +393,34 @@ namespace CxxCli {
                     return ret::ok;
                 }
 
-                template<typename fn_t, typename ncb_t = callback_t<cb_t, fn_t, const char *>, typename r = typename std::enable_if<ncb_t::validCallback, Var_t<id_t, ncb_t>>::type>
-                constexpr friend auto operator>>(Var_t v, fn_t fn) -> r {
-                    return r(std::move(static_cast<identifierContainer<id_t> &>(v)), ncb_t(std::move(static_cast<cb_t &>(v)), std::move(fn)));
+                // lambda assignment
+                template<typename fn_t, typename ncb_t = callback_t<cb_t, fn_t, const char *>>
+                constexpr friend auto operator>>(Var_t v, fn_t fn) -> typename std::enable_if<ncb_t::validCallback, Var_t<id_t, ncb_t>>::type {
+                    return Var_t<id_t, ncb_t>(std::move(static_cast<identifierContainer<id_t> &>(v)), ncb_t(std::move(static_cast<cb_t &>(v)), std::move(fn)));
                 }
 
-                template<typename scalar_t, typename ncb_t = callback_t<cb_t, lambdaScalarParser<scalar_t>, const char *>, typename r = typename std::enable_if<std::is_scalar<scalar_t>::value, Var_t<id_t, ncb_t>>::type>
-                constexpr friend auto operator>>(Var_t v, scalar_t * target) -> r {
-                    return r(std::move(static_cast<identifierContainer<id_t> &>(v)), ncb_t(std::move(static_cast<cb_t &>(v)), lambdaScalarParser<scalar_t>{target}));
+                // set arithemtic
+                template<typename arithemtic_t, typename ncb_t = callback_t<cb_t, lambdaArithmeticSetter<arithemtic_t>, const char *>>
+                constexpr friend auto operator>>(Var_t v, arithemtic_t * target) -> typename std::enable_if<std::is_arithmetic<arithemtic_t>::value, Var_t<id_t, ncb_t>>::type {
+                    return Var_t<id_t, ncb_t>(std::move(static_cast<identifierContainer<id_t> &>(v)), ncb_t(std::move(static_cast<cb_t &>(v)), lambdaArithmeticSetter<arithemtic_t>{target}));
                 }
 
-                constexpr friend auto operator>>(Var_t v, const char ** target) -> Var_t<id_t, callback_t<cb_t, lambdaStringParser<const char *>, const char *>> {
-                    using ncb_t = callback_t<cb_t, lambdaStringParser<const char *>, const char *>;
-                    using r = Var_t<id_t, ncb_t>;
-                    return r(std::move(static_cast<identifierContainer<id_t> &>(v)), ncb_t(std::move(static_cast<cb_t &>(v)), lambdaStringParser<const char *>{target}));
+                // add arithemtic
+                template<typename container_t, typename vt = typename container_t::value_type, typename ncb_t = callback_t<cb_t, lambdaArithmeticAdder<container_t, vt>, const char *>>
+                constexpr friend auto operator>>(Var_t v, container_t * target) -> typename std::enable_if<std::is_arithmetic<vt>::value && !std::is_same<vt, char>::value, Var_t<id_t, ncb_t>>::type {
+                    return Var_t<id_t, ncb_t>(std::move(static_cast<identifierContainer<id_t> &>(v)), ncb_t(std::move(static_cast<cb_t &>(v)), lambdaArithmeticAdder<container_t, vt>{target}));
                 }
 
-                template<typename char_t, typename traits_t, typename allocator_t>
-                constexpr friend auto operator>>(Var_t v, std::basic_string<char_t, traits_t, allocator_t> * target) -> Var_t<id_t, callback_t<cb_t, lambdaStringParser<std::basic_string<char_t, traits_t, allocator_t>>, const char *>> {
-                    using sp = lambdaStringParser<std::basic_string<char_t, traits_t, allocator_t>>;
-                    using ncb_t = callback_t<cb_t, sp, const char *>;
-                    using r = Var_t<id_t, ncb_t>;
-                    return r(std::move(static_cast<identifierContainer<id_t> &>(v)), ncb_t(std::move(static_cast<cb_t &>(v)), sp{target}));
+                // add string
+                template<typename container_t, typename vt = typename container_t::value_type, typename ncb_t = callback_t<cb_t, lambdaStringAdder<container_t>, const char *>>
+                constexpr friend auto operator>>(Var_t v, container_t * target) -> typename std::enable_if<has_add_functionality_v<container_t, const char *>, Var_t<id_t, ncb_t>>::type {
+                    return Var_t<id_t, ncb_t>(std::move(static_cast<identifierContainer<id_t> &>(v)), ncb_t(std::move(static_cast<cb_t &>(v)), lambdaStringAdder<container_t>{target}));
+                }
+
+                // set string
+                template<typename string_t, typename ncb_t = callback_t<cb_t, lambdaStringSetter<string_t>, const char *>>
+                constexpr friend auto operator>>(Var_t v, string_t * target) -> typename std::enable_if<std::is_assignable<string_t &, const char *>::value, Var_t<id_t, ncb_t>>::type {
+                    return Var_t<id_t, ncb_t>(std::move(static_cast<identifierContainer<id_t> &>(v)), ncb_t(std::move(static_cast<cb_t &>(v)), lambdaStringSetter<string_t>{target}));
                 }
 
             };

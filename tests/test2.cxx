@@ -16,7 +16,7 @@ static int test() {
     const char * src_name = nullptr;
     std::string header_name;
     const char * output_dir = nullptr;
-
+    
     auto cmd = Command(
         Loop(
             Sequence(

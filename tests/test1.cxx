@@ -2,6 +2,7 @@
 #include <cassert>
 
 #include <vector>
+#include <string>
 #include <iostream>
 
 #include <CxxCli/CxxCli.hpp>
@@ -17,7 +18,7 @@ static int test() {
     std::vector<const char *> cmd_ds_delete;
     int cmd_ds_create = 0;
     std::vector<const char *> cmd_ds_create_l;
-    std::vector<const char *> cmd_ds_create_i;
+    std::vector<std::string> cmd_ds_create_i;
     std::vector<const char *> cmd_ds_create_X;
     int cmd_use_lang = 0;
 
@@ -35,9 +36,9 @@ static int test() {
                             Sequence(Const("delete"), Var() >> [&] (const char * value) { cmd_ds_delete.emplace_back(value); }),
                             Sequence(
                                 Const("create") >> [&] { ++cmd_ds_create; },
-                                Optional(Sequence(Const("-l"), Var() >> [&] (const char * value) { cmd_ds_create_l.emplace_back(value); })) >> [&] { ++cmd_use_lang; },
-                                Loop(Sequence(Const("-i"), Var() >> [&] (const char * value) { cmd_ds_create_i.emplace_back(value); })),
-                                Var() >> [&] (const char * value) { cmd_ds_create_X.emplace_back(value); }
+                                Optional(Sequence(Const("-l"), Var() >> &cmd_ds_create_l)) >> [&] { ++cmd_use_lang; },
+                                Loop(Sequence(Const("-i"), Var() >> &cmd_ds_create_i)),
+                                Var() >> &cmd_ds_create_X
                             )
                         )
                     ) & UsageAsList,
@@ -56,6 +57,14 @@ static int test() {
     );
 
     auto result = cmd.parse(argc, argv);
+
+    static_assert(!details::has_emplace_back_v<int, int>, "failing template");
+    static_assert(details::has_emplace_back_v<std::vector<int>, int>, "failing template");
+    static_assert(details::has_emplace_back_v<std::vector<std::string>, const char *>, "failing template");
+
+    static_assert(!details::has_push_back_v<int, int>, "failing template");
+    static_assert(details::has_push_back_v<std::vector<int>, int>, "failing template");
+    static_assert(details::has_push_back_v<std::vector<std::string>, const char *>, "failing template");
 
     assert(result);
 
